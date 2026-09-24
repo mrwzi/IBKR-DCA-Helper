@@ -1,0 +1,23 @@
+node_modules/
+dist/
+dist-*/
+release/
+electron/electron/
+ibkr-price-relay/ibkr-price-relay/
+**/__pycache__/
+*.pyc
+*.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+backups/
+.env
+.env.*
+!*.example
+*.exe
+tmp-runtime-*/
+coverage/
+Run DCA Helper (Latest).vbs
+eng.traineddata
+docs/screenshots/*.png
+!docs/screenshots/github-*.png
