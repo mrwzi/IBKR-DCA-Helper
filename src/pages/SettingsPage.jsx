@@ -2,17 +2,17 @@ import { useState } from 'react';
 
 export function SettingsPage(props) {
   const {
-    CashActivityPanel, busy, cashSummary, checkIbkrConnection, checkYahooConnection,
+    busy, checkIbkrConnection, checkYahooConnection,
     checkingConnection, chooseIbkrActivityStatement, connectionStatus,
-    deleteCashTransaction, formatDate, ibkrActivityStatus, ibkrImportStage, money,
-    saveCashTransaction, saveSettings, settings, settingsWarning, updateUsdCadRate,
+    formatDate, ibkrActivityStatus, ibkrImportStage, money,
+    saveSettings, settings, settingsWarning, updateUsdCadRate,
   } = props;
   const [advancedOpen, setAdvancedOpen] = useState(false);
   if (!settings) return null;
   const update = (changes) => saveSettings({ ...settings, ...changes });
 
   return <main className="layout settingsLayout"><section className="panel settingsPanel">
-    <header className="settingsHeader"><div><h2>Settings</h2><p>Manage market data, cash activity, and IBKR statement checks.</p></div><span className="localDataBadge">Saved locally</span></header>
+    <header className="settingsHeader"><div><h2>Settings</h2><p>Manage market data and IBKR statement checks.</p></div><span className="localDataBadge">Saved locally</span></header>
 
     <div className="settingsCard marketDataCard">
       <div className="sectionHead"><div><h3>Market data</h3><p>Choose how prices and currency conversions refresh.</p></div></div>
@@ -26,8 +26,6 @@ export function SettingsPage(props) {
       {settings.usdCadRateWarning && <p className="warning">FX fetch failed. Manual USD/CAD override is active. {settings.usdCadRateWarning}</p>}
       {settingsWarning && <p className="warning">{settingsWarning}</p>}
     </div>
-
-    <CashActivityPanel cashSummary={cashSummary} formatDate={formatDate} money={money} onSave={saveCashTransaction} onDelete={deleteCashTransaction} busy={busy} />
 
     <div className="settingsCard reconciliationSection">
       <div className="sectionHead"><div><h3>IBKR statement reconciliation</h3><p>Import a statement to verify trades. You review every proposed change before a local backup is created and anything is applied.</p></div></div>

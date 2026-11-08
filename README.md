@@ -41,7 +41,7 @@ Review portfolio performance, investment activity, fees, allocation, and IBKR re
 
 ## Installation
 
-Most users should download `DCA-Helper-Setup-1.0.48.exe` from the GitHub Releases page. The installer creates Desktop and Start Menu shortcuts and registers DCA Helper in Windows Installed Apps.
+Most users should download `DCA-Helper-Setup-1.0.49.exe` from the GitHub Releases page. The installer creates Desktop and Start Menu shortcuts and registers DCA Helper in Windows Installed Apps.
 
 Installing a newer version keeps the existing local portfolio database. Uninstalling the application also leaves portfolio data in place unless the user removes it manually.
 
@@ -61,7 +61,7 @@ Installing a newer version keeps the existing local portfolio database. Uninstal
 3. Review the reconciliation preview. It identifies unchanged records, corrections, missing trades, and local records that need review.
 4. Apply only the verified changes. The app creates a backup first and audits the saved result.
 5. Import each completed calendar month thereafter for regular accuracy checks. New users do not see this reminder until their first successful statement import.
-6. Use **Settings → Cash activity** for deposits, withdrawals, dividends, interest, fees, and adjustments.
+6. Use **Add money** in the top bar to record a deposit. Other cash adjustments remain available through the local cash ledger and do not change shares or trade prices.
 
 ## What this app is and is not
 

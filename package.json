@@ -1,6 +1,6 @@
 {
   "name": "dca-helper",
-  "version": "1.0.48",
+  "version": "1.0.49",
   "description": "Private local portfolio tracker for Interactive Brokers.",
   "main": "electron/main.cjs",
   "scripts": {
@@ -36,7 +36,8 @@
       "package.json"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": true,
@@ -44,6 +45,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "DCA Helper",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true
     },

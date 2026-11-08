@@ -142,6 +142,13 @@ function normalizePendingOrder(row) {
     estimatedFeeAmount: row.estimated_fee_amount,
     feeCurrency: row.fee_currency,
     visibleTotalAmount: row.visible_total_amount,
+    orderType: row.order_type || 'MARKET',
+    orderSide: row.order_side || 'BUY',
+    limitPrice: row.limit_price,
+    limitCurrency: row.limit_currency || row.cash_currency || 'USD',
+    status: row.status || 'PENDING',
+    triggeredAt: utcTimestamp(row.triggered_at),
+    note: row.note || '',
     ocrText: row.ocr_text || '',
     createdAt: utcTimestamp(row.created_at),
     updatedAt: utcTimestamp(row.updated_at),
@@ -273,6 +280,13 @@ function createDb(userDataPath) {
       estimated_fee_amount REAL,
       fee_currency TEXT CHECK(fee_currency IN ('CAD', 'USD')),
       visible_total_amount REAL,
+      order_type TEXT NOT NULL DEFAULT 'MARKET' CHECK(order_type IN ('MARKET', 'LIMIT')),
+      order_side TEXT NOT NULL DEFAULT 'BUY' CHECK(order_side IN ('BUY', 'SELL')),
+      limit_price REAL,
+      limit_currency TEXT CHECK(limit_currency IN ('CAD', 'USD')),
+      status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'READY', 'CANCELLED')),
+      triggered_at TEXT,
+      note TEXT,
       ocr_text TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -312,6 +326,17 @@ function createDb(userDataPath) {
   const pendingOrderColumns = db.prepare('PRAGMA table_info(pending_orders)').all().map((column) => column.name);
   if (!pendingOrderColumns.includes('shares_amount')) {
     db.prepare('ALTER TABLE pending_orders ADD COLUMN shares_amount REAL').run();
+  }
+  for (const [column, definition] of [
+    ['order_type', "TEXT NOT NULL DEFAULT 'MARKET'"],
+    ['order_side', "TEXT NOT NULL DEFAULT 'BUY'"],
+    ['limit_price', 'REAL'],
+    ['limit_currency', 'TEXT'],
+    ['status', "TEXT NOT NULL DEFAULT 'PENDING'"],
+    ['triggered_at', 'TEXT'],
+    ['note', 'TEXT'],
+  ]) {
+    if (!pendingOrderColumns.includes(column)) db.prepare(`ALTER TABLE pending_orders ADD COLUMN ${column} ${definition}`).run();
   }
 
   const holdingColumns = db.prepare('PRAGMA table_info(holdings)').all().map((column) => column.name);
@@ -864,15 +889,20 @@ function createDb(userDataPath) {
       const feeAmount = payload.estimatedFeeAmount === '' || payload.estimatedFeeAmount == null ? null : toNumber(payload.estimatedFeeAmount, NaN);
       const feeCurrency = payload.feeCurrency === 'USD' ? 'USD' : 'CAD';
       const visibleTotal = payload.visibleTotalAmount === '' || payload.visibleTotalAmount == null ? null : toNumber(payload.visibleTotalAmount, NaN);
+      const orderType = String(payload.orderType || 'MARKET').toUpperCase() === 'LIMIT' ? 'LIMIT' : 'MARKET';
+      const orderSide = String(payload.orderSide || 'BUY').toUpperCase() === 'SELL' ? 'SELL' : 'BUY';
+      const limitPrice = payload.limitPrice === '' || payload.limitPrice == null ? null : toNumber(payload.limitPrice, NaN);
+      const limitCurrency = payload.limitCurrency === 'CAD' ? 'CAD' : 'USD';
       if (!ticker) throw new Error('Pending order needs a ticker.');
       if (mode === 'cash' && (!Number.isFinite(cashAmount) || cashAmount <= 0)) throw new Error('Pending cash order needs a positive cash amount.');
       if (mode === 'shares' && (!Number.isFinite(sharesAmount) || sharesAmount <= 0)) throw new Error('Pending share order needs a positive share amount.');
       if (feeAmount != null && (!Number.isFinite(feeAmount) || feeAmount < 0)) throw new Error('Estimated fee cannot be negative.');
+      if (orderType === 'LIMIT' && (!Number.isFinite(limitPrice) || limitPrice <= 0)) throw new Error('Limit orders need a positive limit price.');
       db.prepare(`
         INSERT INTO pending_orders
-          (holding_id, ticker, order_mode, shares_amount, cash_amount, cash_currency, estimated_fee_amount, fee_currency, visible_total_amount, ocr_text)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(Number.isFinite(holdingId) ? holdingId : null, ticker, mode, sharesAmount, cashAmount, cashCurrency, feeAmount, feeCurrency, Number.isFinite(visibleTotal) ? visibleTotal : null, String(payload.ocrText || ''));
+          (holding_id, ticker, order_mode, shares_amount, cash_amount, cash_currency, estimated_fee_amount, fee_currency, visible_total_amount, order_type, order_side, limit_price, limit_currency, status, note, ocr_text)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+      `).run(Number.isFinite(holdingId) ? holdingId : null, ticker, mode, sharesAmount, cashAmount, cashCurrency, feeAmount, feeCurrency, Number.isFinite(visibleTotal) ? visibleTotal : null, orderType, orderSide, orderType === 'LIMIT' ? limitPrice : null, orderType === 'LIMIT' ? limitCurrency : null, String(payload.note || ''), String(payload.ocrText || ''));
       return this.listPendingOrders();
     },
 

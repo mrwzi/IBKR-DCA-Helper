@@ -17,7 +17,8 @@ import { TradeDetailsModal } from './components/modals/TradeDetailsModal.jsx';
 import { CalendarDayModal } from './components/modals/CalendarDayModal.jsx';
 import { HoldingModal } from './components/modals/HoldingModal.jsx';
 import { BrokerPriceModal } from './components/modals/BrokerPriceModal.jsx';
-import { CashActivityPanel } from './components/CashActivityPanel.jsx';
+import { AddMoneyModal } from './components/AddMoneyModal.jsx';
+import { LimitOrderModal } from './components/LimitOrderModal.jsx';
 
 import { emptyForm, emptyBuyForm, money, percent, shares, fixedShares, usdCommission, formatDate, dateKey, NON_INVESTMENT_TICKERS, isInvestmentBuyLogRow, addDaysToDateKey, monthLabel, buildBuyCalendarDays, isManualRow, isUntrustedRow, formatSource, formatCadCostStatus, buySourceLabel, sourceBadgeClass, formatStatus, formatTodayStatus, formatShortReason, formatLastPrice, formatChange, deriveBrokerPreviousClose, numberOrNull, roundMoney, roundShares, convertAmountToCad, convertAmount, calculateBuyRecordPreview, defaultCurrency, validateHolding, getRangeStart, filterHistory, buildReport, buildBuyLogReport, buildSinceLastBuyMap, buildBoughtTodaySet } from './lib/appViewModel.jsx';
 
@@ -30,6 +31,8 @@ function App() {
   const [pendingOrders, setPendingOrders] = useState([]);
   const [settings, setSettings] = useState(null);
   const [cashSummary, setCashSummary] = useState({ balanceCAD: 0, transactions: [] });
+  const [addMoneyOpen, setAddMoneyOpen] = useState(false);
+  const [limitOrderOpen, setLimitOrderOpen] = useState(false);
   const [ibkrActivityStatus, setIbkrActivityStatus] = useState({ history: [], reminder: { due: false } });
   const [ibkrActivityPreview, setIbkrActivityPreview] = useState(null);
   const [ibkrImportStage, setIbkrImportStage] = useState('');
@@ -188,6 +191,14 @@ function App() {
   }, [form.ticker, form.priceSymbol]);
 
   const rows = plan?.rows || [];
+  const currentPriceByTicker = useMemo(
+    () => Object.fromEntries(
+      rows
+        .map((row) => [row.ticker, Number(row.lastPrice)])
+        .filter(([, price]) => Number.isFinite(price) && price > 0),
+    ),
+    [rows],
+  );
   const isCashPool = false;
   const isDipRanking = true;
   const enabledHoldingCount = holdings.filter((holding) => holding.enabled).length;
@@ -488,9 +499,56 @@ function App() {
     try {
       await api.saveCashTransaction(transaction);
       await reload();
-      setMessage('Cash activity saved. Available cash was recalculated.');
-    } catch (error) { setMessage(error.message || 'Could not save cash activity.'); }
+      setMessage('Money added. Available cash was recalculated.');
+      return true;
+    } catch (error) { setMessage(error.message || 'Could not add money.'); }
     finally { setBusy(false); }
+    return false;
+  }
+
+  async function saveLimitOrder(form) {
+    const holding = holdings.find((item) => String(item.id) === String(form.holdingId))
+      || holdings.find((item) => item.ticker === form.ticker);
+    const sharesBought = Number(form.sharesBought);
+    const limitPrice = Number(form.limitPrice);
+    if (!holding) {
+      setMessage('Choose a holding for this limit order.');
+      return;
+    }
+    if (!Number.isFinite(sharesBought) || sharesBought <= 0) {
+      setMessage('Quantity must be greater than zero.');
+      return;
+    }
+    if (!Number.isFinite(limitPrice) || limitPrice <= 0) {
+      setMessage('Limit price must be greater than zero.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api.savePendingOrder({
+        holdingId: holding.id,
+        ticker: holding.ticker,
+        mode: 'shares',
+        sharesBought,
+        orderType: 'LIMIT',
+        orderSide: form.orderSide === 'SELL' ? 'SELL' : 'BUY',
+        limitPrice,
+        limitCurrency: form.limitCurrency === 'CAD' ? 'CAD' : 'USD',
+        note: form.note,
+      });
+      if (result?.ok === false) {
+        setMessage(result.error || 'Could not save limit order.');
+        return;
+      }
+      setLimitOrderOpen(false);
+      await reload();
+      setActiveTab('buyLog');
+      setMessage('Limit order saved. DCA Helper will flag it when the price reaches your target; complete it in IBKR.');
+    } catch (error) {
+      setMessage(error.message || 'Could not save limit order.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function deleteCashTransaction(id) {
@@ -1064,6 +1122,8 @@ function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         openManualBuy={openManualBuy}
+        openAddMoney={() => setAddMoneyOpen(true)}
+        openLimitOrder={() => setLimitOrderOpen(true)}
         canRecordBuy={holdings.length > 0}
         refreshPrices={refreshPrices}
         canRefresh={canRefresh}
@@ -1078,7 +1138,7 @@ function App() {
       {activeTab === 'today' ? (
         <TodayPage {...{ MoreVertical, Plus, boughtTodayTickers, buyLogReport, buyRowsByTicker, deleteHolding, formatChange, formatLastPrice, formatSource, formatStatus, formatTodayStatus, hasHoldings, holdingActionId, holdings, isCashPool, isDipRanking, isUntrustedRow, money, openAddHolding, openEditHolding, percent, plan, portfolioValue, reconciliationIssues, rows, setActiveTab, setHoldingActionId, settings, shares, sinceLastBuyByTicker }} />
       ) : activeTab === 'buyLog' ? (
-        <BuyLogPage {...{ Edit3, Trash2, buyCadFilter, buyDateFilter, buyLog, buySearch, buySort, buySourceFilter, buySourceLabel, buyTickerFilter, deleteBuyLogRecord, deletePendingOrder, editBuyLog, filteredBuyLog, formatCadCostStatus, formatDate, money, openPendingOrder, pendingOrders, setBuyCadFilter, setBuyDateFilter, setBuySearch, setBuySort, setBuySourceFilter, setBuyTickerFilter, setSelectedBuyLogRow, shares, sourceBadgeClass, tickerOptions }} />
+        <BuyLogPage {...{ Edit3, Trash2, buyCadFilter, buyDateFilter, buyLog, buySearch, buySort, buySourceFilter, buySourceLabel, buyTickerFilter, currentPriceByTicker, deleteBuyLogRecord, deletePendingOrder, editBuyLog, filteredBuyLog, formatCadCostStatus, formatDate, money, openPendingOrder, pendingOrders, setBuyCadFilter, setBuyDateFilter, setBuySearch, setBuySort, setBuySourceFilter, setBuyTickerFilter, setSelectedBuyLogRow, shares, sourceBadgeClass, tickerOptions }} />
       ) : activeTab === 'calendar' ? (
         <CalendarPage {...{ buyLog, calendarFilteredDays, calendarMonth, calendarMonthTotal, calendarTickerFilter, calendarView, formatDate, money, monthLabel, setCalendarMonth, setCalendarTickerFilter, setCalendarView, setSelectedBuyLogRow, setSelectedCalendarDay, shares, tickerOptions }} />
       ) : activeTab === 'chart' ? (
@@ -1086,7 +1146,7 @@ function App() {
       ) : activeTab === 'reports' ? (
         <ReportsPage {...{ buyLogReport, money, percent, portfolioValue, shares, usdCommission }} />
       ) : (
-        <SettingsPage {...{ CashActivityPanel, busy, cashSummary, checkIbkrConnection, checkYahooConnection, checkingConnection, chooseIbkrActivityStatement, connectionStatus, deleteCashTransaction, formatDate, ibkrActivityStatus, ibkrImportStage, money, saveCashTransaction, saveSettings, settings, settingsWarning, updateUsdCadRate }} />
+        <SettingsPage {...{ busy, checkIbkrConnection, checkYahooConnection, checkingConnection, chooseIbkrActivityStatement, connectionStatus, formatDate, ibkrActivityStatus, ibkrImportStage, money, saveSettings, settings, settingsWarning, updateUsdCadRate }} />
       )}
 
       {ibkrActivityStatus.reminder?.due && (
@@ -1104,6 +1164,10 @@ function App() {
       {buyModal && <RecordBuyModal {...{ busy, buyForm, buyModal, buyPreview, buyScanInputRef, buyScanReview, buyScanStatus, buyScreenshotPreview, clearBuyScreenshotReview, handleBuyPaste, handleBuyScreenshot, holdings, markBought, money, recordTransmittedPreview, savePendingOrder, setBuyForm, setBuyModal, setBuyScreenshotPreview }} />}
 
       {brokerModal && <BrokerPriceModal {...{ brokerForm, brokerModal, busy, saveBrokerOverride, setBrokerForm, setBrokerModal }} />}
+
+      {addMoneyOpen && <AddMoneyModal cashSummary={cashSummary} money={money} onSave={saveCashTransaction} onDelete={deleteCashTransaction} busy={busy} onClose={() => setAddMoneyOpen(false)} />}
+
+      {limitOrderOpen && <LimitOrderModal holdings={holdings} busy={busy} onSave={saveLimitOrder} onClose={() => setLimitOrderOpen(false)} />}
 
       {message && (
         <div className="toast" role="status" aria-live="polite">

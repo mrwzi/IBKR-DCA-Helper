@@ -1236,6 +1236,245 @@ tbody tr:last-child td {
   box-shadow: var(--shadow-pop);
 }
 
+.cashActivityModal {
+  width: min(720px, calc(100vw - 32px));
+  gap: 18px;
+}
+
+.cashActivityModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 4px;
+}
+
+.cashActivityModalHeader h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.cashActivityModalHeader p {
+  max-width: 480px;
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+.cashActivityHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.cashActivityHeaderActions .cashBalance {
+  justify-items: end;
+}
+
+.cashActivityHeaderActions .iconButton {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.cashActivityAction {
+  white-space: nowrap;
+}
+
+.addMoneyModal {
+  width: min(620px, calc(100vw - 32px));
+  gap: 20px;
+}
+
+.addMoneyModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 2px;
+}
+
+.addMoneyModalHeader h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.addMoneyModalHeader p {
+  max-width: 420px;
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+.addMoneyHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.addMoneyHeaderActions .cashBalance {
+  justify-items: end;
+}
+
+.addMoneyHeaderActions .iconButton {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.addMoneyForm {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+}
+
+.addMoneyForm label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.addMoneyForm label small {
+  display: inline;
+  margin-left: 4px;
+  color: var(--text-mute);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.addMoneyActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding-top: 3px;
+}
+
+.addMoneyRecent {
+  display: grid;
+  gap: 8px;
+  padding: 13px 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+}
+
+.addMoneyRecentHeading,
+.addMoneyRecentRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.addMoneyRecentHeading {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.addMoneyRecentHeading small,
+.addMoneyRecentRow small {
+  color: var(--text-mute);
+  font-size: 11px;
+}
+
+.addMoneyRecentRow {
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.addMoneyRecentRow > span {
+  display: grid;
+  gap: 2px;
+}
+
+.addMoneyRecentRow > span strong {
+  color: var(--gain);
+}
+
+.limitOrderModal {
+  width: min(620px, calc(100vw - 32px));
+  gap: 20px;
+}
+
+.limitOrderHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.limitOrderHeader h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.limitOrderHeader p {
+  max-width: 460px;
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+.limitOrderHeader .iconButton {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.limitOrderForm {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+}
+
+.limitOrderForm label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.limitOrderForm label small {
+  display: inline;
+  margin-left: 4px;
+  color: var(--text-mute);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.limitOrderNotice {
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--text-soft);
+  padding: 11px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.limitOrderCard {
+  border-color: rgba(255, 204, 102, 0.28);
+}
+
+.limitOrderCard small {
+  color: var(--text-mute);
+  font-size: 11px;
+}
+
+@media(max-width:650px){.addMoneyModalHeader,.limitOrderHeader{flex-direction:column}.addMoneyHeaderActions{width:100%;justify-content:space-between}.addMoneyHeaderActions .cashBalance{justify-items:start}.addMoneyActions{justify-content:stretch}.addMoneyActions button{flex:1}}
+
 .inlineError {
   border: 1px solid rgba(229, 85, 95, 0.35);
   border-radius: var(--radius-sm);
@@ -1471,3 +1710,4 @@ tbody tr:last-child td {
 
 @media(max-width:1000px){.marketDataCard .settingsGrid{grid-template-columns:1fr 1fr}.cashActivityForm{grid-template-columns:1fr 1fr}.cashActivityForm .cashSubmit{justify-self:start}.settingsFooterGrid{grid-template-columns:1fr}}
 @media(max-width:650px){.settingsLayout{padding:10px}.settingsPanel{padding:0}.settingsHeader,.settingsStatusRow,.advancedConnection,.privacySection{align-items:flex-start;flex-direction:column}.marketDataCard .settingsGrid,.cashActivityForm,.statementChoices,.settingsFooterGrid{grid-template-columns:1fr}.cashBalance{justify-items:start}.cashListHeading{display:none}.cashActivityRow{grid-template-columns:minmax(0,1fr) auto}.cashDelete{grid-column:1/-1;justify-self:start}.reconciliationHistory>div{grid-template-columns:1fr}.reconciliationHistory>div span:last-child{text-align:left}.advancedSettings{grid-template-columns:1fr}}
+@media(max-width:650px){.cashActivityModalHeader{flex-direction:column}.cashActivityHeaderActions{width:100%;justify-content:space-between}.cashActivityHeaderActions .cashBalance{justify-items:start}}

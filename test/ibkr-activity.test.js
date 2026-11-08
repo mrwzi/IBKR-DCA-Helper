@@ -133,4 +133,31 @@ describe('IBKR Activity Statement reconciliation', () => {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('stores limit orders without changing portfolio shares', () => {
+    const tempDir = fs.mkdtempSync('C:/Windows/Temp/dca-limit-order-test-');
+    let database;
+    try {
+      database = createDb(tempDir);
+      const holding = database.saveHolding({ ticker: 'DEMO', priceSymbol: 'DEMO', currency: 'USD', sharesOwned: 2 });
+      const before = database.listHoldings().find((row) => row.id === holding.id).sharesOwned;
+      const saved = database.savePendingOrder({
+        holdingId: holding.id,
+        ticker: 'DEMO',
+        mode: 'shares',
+        sharesBought: 0.5,
+        orderType: 'LIMIT',
+        orderSide: 'BUY',
+        limitPrice: 100,
+        limitCurrency: 'USD',
+        note: 'pullback target',
+      });
+      expect(saved[0]).toMatchObject({ orderType: 'LIMIT', orderSide: 'BUY', limitPrice: 100, limitCurrency: 'USD', note: 'pullback target' });
+      expect(database.listHoldings().find((row) => row.id === holding.id).sharesOwned).toBe(before);
+      expect(() => database.savePendingOrder({ holdingId: holding.id, ticker: 'DEMO', mode: 'shares', sharesBought: 0.5, orderType: 'LIMIT', limitPrice: 0 })).toThrow(/positive limit price/);
+    } finally {
+      database?.close();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });

@@ -1,4 +1,4 @@
-import { MoreVertical, RefreshCw, ScanLine } from 'lucide-react';
+import { DollarSign, MoreVertical, RefreshCw, ScanLine, Target } from 'lucide-react';
 
 const tabs = [
   ['today', 'Today'],
@@ -13,6 +13,8 @@ export function AppChrome({
   activeTab,
   setActiveTab,
   openManualBuy,
+  openAddMoney,
+  openLimitOrder,
   canRecordBuy,
   refreshPrices,
   canRefresh,
@@ -33,6 +35,12 @@ export function AppChrome({
         <div className="actions">
           <button onClick={openManualBuy} disabled={!canRecordBuy}>
             <ScanLine size={16} /> Record Buy
+          </button>
+          <button className="secondary cashActivityAction" onClick={openAddMoney}>
+            <DollarSign size={16} /> Add money
+          </button>
+          <button className="secondary limitOrderAction" onClick={openLimitOrder} disabled={!canRecordBuy} title={!canRecordBuy ? 'Add a holding before creating a limit order.' : ''}>
+            <Target size={16} /> Limit order
           </button>
           <button onClick={() => refreshPrices({ manual: true })} disabled={!canRefresh} title={!canRefresh ? 'Enable at least one holding first.' : ''}>
             <RefreshCw size={16} /> Refresh Prices

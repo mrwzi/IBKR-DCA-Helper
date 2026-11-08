@@ -1,5 +1,7 @@
+import { getLimitOrderState } from '../lib/orderLogic.js';
+
 export function BuyLogPage(props) {
-  const { Edit3, Trash2, buyCadFilter, buyDateFilter, buyLog, buySearch, buySort, buySourceFilter, buySourceLabel, buyTickerFilter, deleteBuyLogRecord, deletePendingOrder, editBuyLog, filteredBuyLog, formatCadCostStatus, formatDate, money, openPendingOrder, pendingOrders, setBuyCadFilter, setBuyDateFilter, setBuySearch, setBuySort, setBuySourceFilter, setBuyTickerFilter, setSelectedBuyLogRow, shares, sourceBadgeClass, tickerOptions } = props;
+  const { Edit3, Trash2, buyCadFilter, buyDateFilter, buyLog, buySearch, buySort, buySourceFilter, buySourceLabel, buyTickerFilter, currentPriceByTicker, deleteBuyLogRecord, deletePendingOrder, editBuyLog, filteredBuyLog, formatCadCostStatus, formatDate, money, openPendingOrder, pendingOrders, setBuyCadFilter, setBuyDateFilter, setBuySearch, setBuySort, setBuySourceFilter, setBuyTickerFilter, setSelectedBuyLogRow, shares, sourceBadgeClass, tickerOptions } = props;
   return (
 <main className="layout">
           {pendingOrders.length > 0 && (
@@ -12,21 +14,32 @@ export function BuyLogPage(props) {
                 <span>{pendingOrders.length} pending</span>
               </div>
               <div className="pendingOrderList">
-                {pendingOrders.map((order) => (
-                  <article key={order.id} className="pendingOrderCard">
-                    <div>
-                      <span className="badge skip">Pending</span>
-                      <strong>{order.ticker}</strong>
-                    </div>
-                    <div><span>Planned amount</span><strong>{order.mode === 'shares' ? `${shares(order.sharesBought)} shares` : order.cashPaidAmount == null ? '-' : `${money(order.cashPaidAmount)} ${order.cashPaidCurrency}`}</strong></div>
-                    <div><span>Estimated fee</span><strong>{order.estimatedFeeAmount == null ? '-' : `${money(order.estimatedFeeAmount)} ${order.feeCurrency}`}</strong></div>
-                    <div><span>Saved</span><strong>{formatDate(order.createdAt)}</strong></div>
-                    <div className="actions">
-                      <button type="button" onClick={() => openPendingOrder(order)}>Finalize filled trade</button>
-                      <button type="button" className="secondary danger" onClick={() => deletePendingOrder(order)}>Delete draft</button>
-                    </div>
-                  </article>
-                ))}
+                {pendingOrders.map((order) => {
+                  const isLimit = String(order.orderType || '').toUpperCase() === 'LIMIT';
+                  const currentPrice = currentPriceByTicker?.[order.ticker];
+                  const limitReady = getLimitOrderState(order, currentPrice) === 'ready';
+                  const side = String(order.orderSide || 'BUY').toUpperCase();
+                  return (
+                    <article key={order.id} className={`pendingOrderCard${isLimit ? ' limitOrderCard' : ''}`}>
+                      <div>
+                        <span className={`badge ${isLimit ? (limitReady ? 'buy' : 'wait') : 'skip'}`}>{isLimit ? `Limit ${side}` : 'Pending'}</span>
+                        <strong>{order.ticker}</strong>
+                      </div>
+                      <div><span>{isLimit ? 'Quantity' : 'Planned amount'}</span><strong>{order.mode === 'shares' ? `${shares(order.sharesBought)} shares` : order.cashPaidAmount == null ? '-' : `${money(order.cashPaidAmount)} ${order.cashPaidCurrency}`}</strong></div>
+                      {isLimit ? (
+                        <div><span>Limit target</span><strong>{money(order.limitPrice)} {order.limitCurrency}</strong><small>{currentPrice == null ? 'Price unavailable' : `Current ${money(currentPrice)} ${order.limitCurrency}`}</small></div>
+                      ) : (
+                        <div><span>Estimated fee</span><strong>{order.estimatedFeeAmount == null ? '-' : `${money(order.estimatedFeeAmount)} ${order.feeCurrency}`}</strong></div>
+                      )}
+                      <div><span>{isLimit ? 'Status' : 'Saved'}</span><strong>{isLimit ? (limitReady ? 'Price reached' : 'Waiting for price') : formatDate(order.createdAt)}</strong>{isLimit && <small>{limitReady ? 'Complete and verify in IBKR' : 'No order is submitted automatically'}</small>}</div>
+                      {isLimit && order.note && <div><span>Note</span><strong>{order.note}</strong></div>}
+                      <div className="actions">
+                        {(!isLimit || side === 'BUY') ? <button type="button" onClick={() => openPendingOrder(order)}>{isLimit ? 'Record filled buy' : 'Finalize filled trade'}</button> : <button type="button" className="secondary" disabled title="Sell fills are recorded in IBKR; this app currently records completed buys.">Record sell in IBKR</button>}
+                        <button type="button" className="secondary danger" onClick={() => deletePendingOrder(order)}>Delete draft</button>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             </section>
           )}
