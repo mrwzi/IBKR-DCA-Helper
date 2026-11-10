@@ -24,6 +24,32 @@ describe('IBKR Activity Statement reconciliation', () => {
     expect(parsed.positions.map((position) => position.shares)).toEqual([0.75]);
   });
 
+  it('accepts a completed statement with positions but no buys', () => {
+    const csv = [
+      'Statement,Data,Period,"March 01, 2026 - March 31, 2026"',
+      'Open Positions,Header,Asset Category,Currency,Symbol,Quantity,Close Price,Cost Price,Cost Basis',
+      'Open Positions,Data,Stocks,USD,DEMO,0.75,105.00,100.00,75.00',
+    ].join('\n');
+    const parsed = parseActivityStatement(csv);
+    expect(parsed.trades).toHaveLength(0);
+    expect(parsed.positions).toHaveLength(1);
+    const preview = buildPreview(parsed, [], 1.35);
+    expect(preview.checks.find((check) => check.label === 'Completed stock executions parsed')).toMatchObject({ passed: true, blocking: false });
+    const tempDir = fs.mkdtempSync('C:/Windows/Temp/dca-no-buy-statement-test-');
+    let database;
+    try {
+      database = createDb(tempDir);
+      database.saveHolding({ ticker: 'DEMO', priceSymbol: 'DEMO', currency: 'USD', sharesOwned: 0 });
+      const result = database.applyIbkrReconciliation(preview, { fileName: 'quiet-month.csv', fileHash: 'quiet-month-hash' });
+      expect(result.verification.executionsChecked).toBe(0);
+      expect(database.listIbkrReconciliations()).toHaveLength(1);
+      expect(database.listHoldings()[0]).toMatchObject({ ibkrPositionShares: 0.75, ibkrCostBasis: 75, ibkrAvgPrice: 100 });
+    } finally {
+      database?.close();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('converts IBKR Eastern execution times across daylight saving time', () => {
     expect(easternToUtc('2026-07-28, 14:52:05')).toBe('2026-07-28T18:52:05.000Z');
     expect(easternToUtc('2026-01-15, 09:30:00')).toBe('2026-01-15T14:30:00.000Z');
@@ -94,7 +120,7 @@ describe('IBKR Activity Statement reconciliation', () => {
       const result = database.applyIbkrReconciliation(preview, { fileName: 'statement.csv', fileHash: 'integration-test-hash' });
       expect(database.listBuyLog()).toHaveLength(2);
       expect(result.history).toHaveLength(1);
-      expect(result.verification).toEqual({ passed: true, executionsChecked: 2, duplicateIds: 0, holdingTotalsChecked: 1 });
+      expect(result.verification).toEqual({ passed: true, executionsChecked: 2, duplicateIds: 0, holdingTotalsChecked: 1, cashChecked: false, cashAdjustmentCAD: 0 });
       expect(fs.existsSync(result.backupPath)).toBe(true);
       expect(() => database.applyIbkrReconciliation(preview, { fileName: 'statement.csv', fileHash: 'integration-test-hash' })).toThrow(/already been applied/);
       const demo = database.listHoldings().find((holding) => holding.ticker === 'DEMO');
@@ -134,6 +160,41 @@ describe('IBKR Activity Statement reconciliation', () => {
     }
   });
 
+  it('reconciles IBKR ending CAD cash without double-counting repeated statements', () => {
+    const tempDir = fs.mkdtempSync('C:/Windows/Temp/dca-statement-cash-test-');
+    let database;
+    try {
+      database = createDb(tempDir);
+      database.saveCashTransaction({ type: 'deposit', amountCAD: 200, occurredAt: '2026-09-01T12:00:00.000Z' });
+      database.saveHolding({ ticker: 'DEMO', priceSymbol: 'DEMO', currency: 'USD', sharesOwned: 0 });
+      const statement = {
+        periodStart: '2026-09-01', periodEnd: '2026-09-30', cash: 180,
+        positions: [{ ticker: 'DEMO', shares: 0.1, costBasis: 10, avgPrice: 100 }],
+        trades: [{ ticker: 'DEMO', boughtAt: '2026-09-15T13:30:00.000Z', sharesBought: 0.1, sharesText: '0.1', buyPrice: 100, buyPriceText: '100', grossUsd: 10, commissionUsd: 0.05, allInUsd: 10.05, brokerTradeId: 'activity:cash-1' }],
+      };
+      const apply = (hash) => {
+        const preview = buildPreview(statement, database.listBuyLog(), database.getSettings().usdCadRate, database.getCashBalanceAt(`${statement.periodEnd}T23:59:59.999Z`));
+        return database.applyIbkrReconciliation(preview, { fileName: `${hash}.csv`, fileHash: hash });
+      };
+      const first = apply('cash-statement-1');
+      expect(first.verification.cashChecked).toBe(true);
+      expect(first.verification.cashAdjustmentCAD).not.toBe(0);
+      expect(database.getCashSummary().balanceCAD).toBeCloseTo(180, 8);
+      expect(database.listCashTransactions().filter((row) => row.type === 'adjustment')).toHaveLength(1);
+
+      // Newer activity must remain in today's available cash when an older
+      // statement is imported again.
+      database.saveCashTransaction({ type: 'deposit', amountCAD: 50, occurredAt: '2026-10-01T12:00:00.000Z' });
+      const second = apply('cash-statement-1-copy');
+      expect(second.verification.cashAdjustmentCAD).toBeCloseTo(0, 8);
+      expect(database.getCashSummary().balanceCAD).toBeCloseTo(230, 8);
+      expect(database.listCashTransactions().filter((row) => row.type === 'adjustment')).toHaveLength(1);
+    } finally {
+      database?.close();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('stores limit orders without changing portfolio shares', () => {
     const tempDir = fs.mkdtempSync('C:/Windows/Temp/dca-limit-order-test-');
     let database;
@@ -155,6 +216,69 @@ describe('IBKR Activity Statement reconciliation', () => {
       expect(saved[0]).toMatchObject({ orderType: 'LIMIT', orderSide: 'BUY', limitPrice: 100, limitCurrency: 'USD', note: 'pullback target' });
       expect(database.listHoldings().find((row) => row.id === holding.id).sharesOwned).toBe(before);
       expect(() => database.savePendingOrder({ holdingId: holding.id, ticker: 'DEMO', mode: 'shares', sharesBought: 0.5, orderType: 'LIMIT', limitPrice: 0 })).toThrow(/positive limit price/);
+      const cashOrder = database.savePendingOrder({
+        holdingId: holding.id, ticker: 'DEMO', mode: 'cash', cashPaidAmount: 110, cashPaidCurrency: 'USD',
+        orderType: 'LIMIT', orderSide: 'BUY', limitPrice: 161.14, limitCurrency: 'USD',
+        screenshotDataUrl: 'data:image/png;base64,ZmFrZS1vcmRlci1wcmV2aWV3',
+      }).find((order) => order.limitPrice === 161.14);
+      expect(cashOrder).toMatchObject({ mode: 'cash', cashPaidAmount: 110, cashPaidCurrency: 'USD', limitPrice: 161.14, status: 'PENDING', screenshotDataUrl: 'data:image/png;base64,ZmFrZS1vcmRlci1wcmV2aWV3' });
+      const cancelled = database.cancelPendingOrder(cashOrder.id).find((order) => order.id === cashOrder.id);
+      expect(cancelled).toMatchObject({ status: 'CANCELLED', cashPaidAmount: 110 });
+      expect(cancelled.cancelledAt).toBeTruthy();
+      expect(database.listHoldings().find((row) => row.id === holding.id).sharesOwned).toBe(before);
+    } finally {
+      database?.close();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps repeated monthly and YTD imports idempotent and applies corrections safely', () => {
+    const tempDir = fs.mkdtempSync('C:/Windows/Temp/dca-repeated-statements-test-');
+    let database;
+    const trade = (id, date, shares, price, commission = 0.05) => ({
+      ticker: 'DEMO', boughtAt: `${date}T13:30:00.000Z`, sharesBought: shares, sharesText: String(shares),
+      buyPrice: price, buyPriceText: String(price), grossUsd: shares * price, commissionUsd: commission,
+      allInUsd: shares * price + commission, brokerTradeId: `activity:${id}`,
+    });
+    const apply = (statement, hash) => {
+      const preview = buildPreview(statement, database.listBuyLog(), database.getSettings().usdCadRate);
+      expect(preview.checks.some((check) => !check.passed && check.blocking)).toBe(false);
+      return database.applyIbkrReconciliation(preview, { fileName: `${hash}.csv`, fileHash: hash });
+    };
+    try {
+      database = createDb(tempDir);
+      database.saveHolding({ ticker: 'DEMO', priceSymbol: 'DEMO', currency: 'USD', sharesOwned: 0 });
+      const janA = trade('jan-a', '2026-01-15', 0.1, 100);
+      const janB = trade('jan-b', '2026-01-20', 0.2, 101, 0.06);
+      const febC = trade('feb-c', '2026-02-10', 0.3, 102, 0.07);
+
+      apply({ periodStart: '2026-01-01', periodEnd: '2026-01-31', positions: [{ ticker: 'DEMO', shares: 0.3, costBasis: 30.26, avgPrice: 100.8666667 }], trades: [janA, janB] }, 'statement-jan');
+      expect(database.listBuyLog()).toHaveLength(2);
+
+      // The same completed month imported again is unchanged, not duplicated.
+      const repeatedJan = apply({ periodStart: '2026-01-01', periodEnd: '2026-01-31', positions: [{ ticker: 'DEMO', shares: 0.3, costBasis: 30.26, avgPrice: 100.8666667 }], trades: [janA, janB] }, 'statement-jan-copy');
+      expect(repeatedJan.verification.executionsChecked).toBe(2);
+      expect(database.listBuyLog()).toHaveLength(2);
+
+      apply({ periodStart: '2026-02-01', periodEnd: '2026-02-28', positions: [{ ticker: 'DEMO', shares: 0.6, costBasis: 60.93, avgPrice: 101.55 }], trades: [febC] }, 'statement-feb');
+      expect(database.listBuyLog()).toHaveLength(3);
+
+      // A later YTD statement sees all three broker executions as unchanged.
+      const ytd = apply({ periodStart: '2026-01-01', periodEnd: '2026-02-28', positions: [{ ticker: 'DEMO', shares: 0.6, costBasis: 60.93, avgPrice: 101.55 }], trades: [janA, janB, febC] }, 'statement-ytd');
+      expect(ytd.verification.executionsChecked).toBe(3);
+      expect(database.listBuyLog()).toHaveLength(3);
+
+      // A corrected commission/price from a later statement updates the existing row.
+      const correctedFebC = trade('feb-c-corrected', '2026-02-10', 0.3, 102.25, 0.08);
+      const corrected = apply({ periodStart: '2026-02-01', periodEnd: '2026-02-28', positions: [{ ticker: 'DEMO', shares: 0.6, costBasis: 61.005, avgPrice: 101.675 }], trades: [correctedFebC] }, 'statement-feb-correction');
+      expect(corrected.verification.executionsChecked).toBe(1);
+      expect(database.listBuyLog()).toHaveLength(3);
+      const savedCorrection = database.listBuyLog().find((row) => row.boughtAt === febC.boughtAt);
+      expect(savedCorrection).toMatchObject({ buyPrice: 102.25, commissionUsd: 0.08, ibkrTradeId: 'activity:feb-c-corrected' });
+      expect(database.listCashTransactions().filter((row) => row.buyLogId === savedCorrection.id)).toHaveLength(1);
+      expect(database.listIbkrReconciliations()).toHaveLength(5);
+      expect(database.listIbkrReconciliations().every((item) => fs.existsSync(item.backupPath))).toBe(true);
+      expect(database.listBuyLog().map((row) => row.ibkrTradeId)).toEqual(expect.arrayContaining(['activity:jan-a', 'activity:jan-b', 'activity:feb-c-corrected']));
     } finally {
       database?.close();
       fs.rmSync(tempDir, { recursive: true, force: true });

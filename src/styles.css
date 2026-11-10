@@ -748,6 +748,38 @@ tbody tr:last-child td {
   background: var(--bg-inset);
 }
 
+.limitOrderScreenshotField {
+  display: grid;
+  gap: 6px;
+}
+
+.limitOrderScreenshotField small,
+.pendingOrderEvidence small {
+  color: var(--text-mute);
+  font-size: 12px;
+}
+
+.pendingOrderScreenshot {
+  display: block;
+  width: min(220px, 100%);
+  max-height: 130px;
+  object-fit: contain;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+}
+
+.limitOrderScreenshotPreview {
+  width: min(360px, 100%);
+  max-height: 180px;
+}
+
+.pendingOrderEvidence {
+  display: grid;
+  gap: 5px;
+  align-content: start;
+}
+
 .reviewHead,
 .confidenceGrid {
   display: flex;
@@ -870,6 +902,16 @@ tbody tr:last-child td {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.orderModeSwitch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.orderModeSwitch button {
+  min-height: 34px;
 }
 
 .confidenceGrid span,

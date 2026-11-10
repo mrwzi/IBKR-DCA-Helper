@@ -23,4 +23,8 @@ describe('limit order logic', () => {
     expect(getLimitOrderState({ orderType: 'MARKET' }, 90)).toBe('pending');
     expect(isLimitOrder({ orderType: 'MARKET' })).toBe(false);
   });
+
+  it('never reports a cancelled broker order as ready', () => {
+    expect(getLimitOrderState({ ...buy, status: 'CANCELLED' }, 90)).toBe('cancelled');
+  });
 });

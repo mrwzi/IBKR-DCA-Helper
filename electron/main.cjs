@@ -276,7 +276,8 @@ ipcMain.handle('ibkrActivity:choosePreview', async (_event, mode) => {
       throw selectedModeError;
     }
   }
-  const preview = buildPreview(statement, db.listBuyLog(), db.getSettings().usdCadRate);
+  const statementPeriodEnd = `${statement.periodEnd}T23:59:59.999Z`;
+  const preview = buildPreview(statement, db.listBuyLog(), db.getSettings().usdCadRate, db.getCashBalanceAt(statementPeriodEnd));
   preview.statement.statementType = statementType;
   preview.statement.requestedMode = mode;
   preview.statement.selectionNotice = selectionNotice;
@@ -412,6 +413,7 @@ ipcMain.handle('pendingOrders:save', (_event, payload) => {
     return { ok: false, error: error.message || 'Could not save pending order.' };
   }
 });
+ipcMain.handle('pendingOrders:cancel', (_event, id) => db.cancelPendingOrder(id));
 ipcMain.handle('pendingOrders:delete', (_event, id) => db.deletePendingOrder(id));
 ipcMain.handle('buyLog:exportCsv', async () => {
   try {

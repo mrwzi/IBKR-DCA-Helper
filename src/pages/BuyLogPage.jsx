@@ -1,7 +1,8 @@
 import { getLimitOrderState } from '../lib/orderLogic.js';
 
 export function BuyLogPage(props) {
-  const { Edit3, Trash2, buyCadFilter, buyDateFilter, buyLog, buySearch, buySort, buySourceFilter, buySourceLabel, buyTickerFilter, currentPriceByTicker, deleteBuyLogRecord, deletePendingOrder, editBuyLog, filteredBuyLog, formatCadCostStatus, formatDate, money, openPendingOrder, pendingOrders, setBuyCadFilter, setBuyDateFilter, setBuySearch, setBuySort, setBuySourceFilter, setBuyTickerFilter, setSelectedBuyLogRow, shares, sourceBadgeClass, tickerOptions } = props;
+  const { Edit3, Trash2, buyCadFilter, buyDateFilter, buyLog, buySearch, buySort, buySourceFilter, buySourceLabel, buyTickerFilter, cancelPendingOrder, currentPriceByTicker, deleteBuyLogRecord, deletePendingOrder, editBuyLog, filteredBuyLog, formatCadCostStatus, formatDate, money, openPendingOrder, pendingOrders, setBuyCadFilter, setBuyDateFilter, setBuySearch, setBuySort, setBuySourceFilter, setBuyTickerFilter, setSelectedBuyLogRow, shares, sourceBadgeClass, tickerOptions } = props;
+  const activePendingCount = pendingOrders.filter((order) => String(order.status || '').toUpperCase() !== 'CANCELLED').length;
   return (
 <main className="layout">
           {pendingOrders.length > 0 && (
@@ -11,18 +12,19 @@ export function BuyLogPage(props) {
                   <h2>Pending orders</h2>
                   <span>Saved previews only—these do not affect shares, reports, or performance.</span>
                 </div>
-                <span>{pendingOrders.length} pending</span>
+                <span>{activePendingCount} active{pendingOrders.length - activePendingCount ? ` · ${pendingOrders.length - activePendingCount} cancelled` : ''}</span>
               </div>
               <div className="pendingOrderList">
                 {pendingOrders.map((order) => {
                   const isLimit = String(order.orderType || '').toUpperCase() === 'LIMIT';
+                  const isCancelled = String(order.status || '').toUpperCase() === 'CANCELLED';
                   const currentPrice = currentPriceByTicker?.[order.ticker];
                   const limitReady = getLimitOrderState(order, currentPrice) === 'ready';
                   const side = String(order.orderSide || 'BUY').toUpperCase();
                   return (
                     <article key={order.id} className={`pendingOrderCard${isLimit ? ' limitOrderCard' : ''}`}>
                       <div>
-                        <span className={`badge ${isLimit ? (limitReady ? 'buy' : 'wait') : 'skip'}`}>{isLimit ? `Limit ${side}` : 'Pending'}</span>
+                        <span className={`badge ${isCancelled ? 'skip' : isLimit ? (limitReady ? 'buy' : 'wait') : 'skip'}`}>{isCancelled ? 'Cancelled in IBKR' : isLimit ? `Limit ${side}` : 'Pending'}</span>
                         <strong>{order.ticker}</strong>
                       </div>
                       <div><span>{isLimit ? 'Quantity' : 'Planned amount'}</span><strong>{order.mode === 'shares' ? `${shares(order.sharesBought)} shares` : order.cashPaidAmount == null ? '-' : `${money(order.cashPaidAmount)} ${order.cashPaidCurrency}`}</strong></div>
@@ -31,11 +33,14 @@ export function BuyLogPage(props) {
                       ) : (
                         <div><span>Estimated fee</span><strong>{order.estimatedFeeAmount == null ? '-' : `${money(order.estimatedFeeAmount)} ${order.feeCurrency}`}</strong></div>
                       )}
-                      <div><span>{isLimit ? 'Status' : 'Saved'}</span><strong>{isLimit ? (limitReady ? 'Price reached' : 'Waiting for price') : formatDate(order.createdAt)}</strong>{isLimit && <small>{limitReady ? 'Complete and verify in IBKR' : 'No order is submitted automatically'}</small>}</div>
+                      {isLimit && order.estimatedFeeAmount != null && <div><span>Estimated fee</span><strong>{money(order.estimatedFeeAmount)} {order.feeCurrency}</strong></div>}
+                      <div><span>{isLimit ? 'Status' : 'Saved'}</span><strong>{isCancelled ? 'Cancelled in IBKR' : isLimit ? (limitReady ? 'Price reached' : 'Watching price') : formatDate(order.createdAt)}</strong>{isLimit && <small>{isCancelled ? `Marked ${formatDate(order.cancelledAt || order.updatedAt)}` : limitReady ? 'Verify Filled in IBKR before recording' : 'Monitoring automatically; IBKR fill still required'}</small>}</div>
                       {isLimit && order.note && <div><span>Note</span><strong>{order.note}</strong></div>}
+                      {isLimit && order.screenshotDataUrl && <details className="pendingOrderEvidence"><summary>View order preview screenshot</summary><a href={order.screenshotDataUrl} target="_blank" rel="noreferrer"><img className="pendingOrderScreenshot" src={order.screenshotDataUrl} alt="Limit order preview screenshot" /></a><small>IBKR order preview — not filled</small></details>}
                       <div className="actions">
-                        {(!isLimit || side === 'BUY') ? <button type="button" onClick={() => openPendingOrder(order)}>{isLimit ? 'Record filled buy' : 'Finalize filled trade'}</button> : <button type="button" className="secondary" disabled title="Sell fills are recorded in IBKR; this app currently records completed buys.">Record sell in IBKR</button>}
-                        <button type="button" className="secondary danger" onClick={() => deletePendingOrder(order)}>Delete draft</button>
+                        {!isCancelled && ((!isLimit || side === 'BUY') ? <button type="button" onClick={() => openPendingOrder(order)}>{isLimit ? 'Record filled buy' : 'Finalize filled trade'}</button> : <button type="button" className="secondary" disabled title="Sell fills are recorded in IBKR; this app currently records completed buys.">Record sell in IBKR</button>)}
+                        {!isCancelled && isLimit && <button type="button" className="secondary" onClick={() => cancelPendingOrder(order)}>Mark cancelled in IBKR</button>}
+                        <button type="button" className="secondary danger" onClick={() => deletePendingOrder(order)}>{isCancelled ? 'Delete history' : 'Delete draft'}</button>
                       </div>
                     </article>
                   );

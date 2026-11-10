@@ -199,6 +199,10 @@ function App() {
     ),
     [rows],
   );
+  const hasPendingLimitOrders = useMemo(
+    () => pendingOrders.some((order) => String(order.orderType || '').toUpperCase() === 'LIMIT' && String(order.status || '').toUpperCase() !== 'CANCELLED'),
+    [pendingOrders],
+  );
   const isCashPool = false;
   const isDipRanking = true;
   const enabledHoldingCount = holdings.filter((holding) => holding.enabled).length;
@@ -509,18 +513,23 @@ function App() {
   async function saveLimitOrder(form) {
     const holding = holdings.find((item) => String(item.id) === String(form.holdingId))
       || holdings.find((item) => item.ticker === form.ticker);
+    const mode = form.mode === 'cash' ? 'cash' : 'shares';
     const sharesBought = Number(form.sharesBought);
+    const cashPaidAmount = Number(form.cashPaidAmount);
     const limitPrice = Number(form.limitPrice);
+    const estimatedFeeAmount = form.estimatedFeeAmount === '' || form.estimatedFeeAmount == null ? null : Number(form.estimatedFeeAmount);
     if (!holding) {
       setMessage('Choose a holding for this limit order.');
       return;
     }
-    if (!Number.isFinite(sharesBought) || sharesBought <= 0) {
-      setMessage('Quantity must be greater than zero.');
-      return;
-    }
+    if (mode === 'shares' && (!Number.isFinite(sharesBought) || sharesBought <= 0)) { setMessage('Quantity must be greater than zero.'); return; }
+    if (mode === 'cash' && (!Number.isFinite(cashPaidAmount) || cashPaidAmount <= 0)) { setMessage('Cash amount must be greater than zero.'); return; }
     if (!Number.isFinite(limitPrice) || limitPrice <= 0) {
       setMessage('Limit price must be greater than zero.');
+      return;
+    }
+    if (estimatedFeeAmount != null && (!Number.isFinite(estimatedFeeAmount) || estimatedFeeAmount < 0)) {
+      setMessage('Estimated fee must be zero or greater.');
       return;
     }
     setBusy(true);
@@ -528,13 +537,18 @@ function App() {
       const result = await api.savePendingOrder({
         holdingId: holding.id,
         ticker: holding.ticker,
-        mode: 'shares',
-        sharesBought,
+        mode,
+        sharesBought: mode === 'shares' ? sharesBought : null,
+        cashPaidAmount: mode === 'cash' ? cashPaidAmount : null,
+        cashPaidCurrency: form.cashPaidCurrency === 'CAD' ? 'CAD' : 'USD',
         orderType: 'LIMIT',
         orderSide: form.orderSide === 'SELL' ? 'SELL' : 'BUY',
         limitPrice,
         limitCurrency: form.limitCurrency === 'CAD' ? 'CAD' : 'USD',
+        estimatedFeeAmount,
+        feeCurrency: form.feeCurrency === 'USD' ? 'USD' : 'CAD',
         note: form.note,
+        screenshotDataUrl: form.screenshotDataUrl,
       });
       if (result?.ok === false) {
         setMessage(result.error || 'Could not save limit order.');
@@ -627,12 +641,12 @@ function App() {
   }
 
   useEffect(() => {
-    if (!settings?.autoRefreshEnabled || enabledHoldingCount === 0) return undefined;
+    if (enabledHoldingCount === 0 || (!settings?.autoRefreshEnabled && !hasPendingLimitOrders)) return undefined;
     const id = window.setInterval(() => {
       refreshPrices({ auto: true });
     }, autoRefreshSeconds * 1000);
     return () => window.clearInterval(id);
-  }, [settings?.autoRefreshEnabled, autoRefreshSeconds, enabledHoldingCount]);
+  }, [settings?.autoRefreshEnabled, autoRefreshSeconds, enabledHoldingCount, hasPendingLimitOrders]);
 
   async function saveToday() {
     if (!canSaveToday) {
@@ -743,7 +757,13 @@ function App() {
   }
 
   async function analyzeBuyScreenshotFile(file) {
-    setBuyScreenshotPreview(URL.createObjectURL(file));
+    const previewDataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(reader.error || new Error('Could not read the screenshot.'));
+      reader.readAsDataURL(file);
+    });
+    setBuyScreenshotPreview(previewDataUrl);
     setBuyScanStatus('Reading image…');
     try {
       const text = await recognizeImageText(file);
@@ -878,6 +898,7 @@ function App() {
       feeCurrency: buyForm.feeCurrency,
       visibleTotalAmount: buyForm.totalAmount,
       ocrText: buyScanReview.rawText,
+      screenshotDataUrl: buyScreenshotPreview,
     });
     if (result?.ok === false) {
       setMessage(result.error || 'Could not save pending order.');
@@ -975,6 +996,18 @@ function App() {
     await api.deletePendingOrder(order.id);
     await reload();
     setMessage('Pending order deleted. Completed trades were not changed.');
+  }
+
+  async function cancelPendingOrder(order) {
+    if (String(order.status || '').toUpperCase() === 'CANCELLED') return;
+    if (!window.confirm(`Mark the ${order.ticker} limit order as cancelled in IBKR?`)) return;
+    setBusy(true);
+    try {
+      await api.cancelPendingOrder(order.id);
+      await reload();
+      setMessage('Order marked cancelled in IBKR. No shares or cash were changed.');
+    } catch (error) { setMessage(error.message || 'Could not mark the order cancelled.'); }
+    finally { setBusy(false); }
   }
 
   async function deleteBuyLogRecord(row) {
@@ -1138,7 +1171,7 @@ function App() {
       {activeTab === 'today' ? (
         <TodayPage {...{ MoreVertical, Plus, boughtTodayTickers, buyLogReport, buyRowsByTicker, deleteHolding, formatChange, formatLastPrice, formatSource, formatStatus, formatTodayStatus, hasHoldings, holdingActionId, holdings, isCashPool, isDipRanking, isUntrustedRow, money, openAddHolding, openEditHolding, percent, plan, portfolioValue, reconciliationIssues, rows, setActiveTab, setHoldingActionId, settings, shares, sinceLastBuyByTicker }} />
       ) : activeTab === 'buyLog' ? (
-        <BuyLogPage {...{ Edit3, Trash2, buyCadFilter, buyDateFilter, buyLog, buySearch, buySort, buySourceFilter, buySourceLabel, buyTickerFilter, currentPriceByTicker, deleteBuyLogRecord, deletePendingOrder, editBuyLog, filteredBuyLog, formatCadCostStatus, formatDate, money, openPendingOrder, pendingOrders, setBuyCadFilter, setBuyDateFilter, setBuySearch, setBuySort, setBuySourceFilter, setBuyTickerFilter, setSelectedBuyLogRow, shares, sourceBadgeClass, tickerOptions }} />
+        <BuyLogPage {...{ Edit3, Trash2, buyCadFilter, buyDateFilter, buyLog, buySearch, buySort, buySourceFilter, buySourceLabel, buyTickerFilter, cancelPendingOrder, currentPriceByTicker, deleteBuyLogRecord, deletePendingOrder, editBuyLog, filteredBuyLog, formatCadCostStatus, formatDate, money, openPendingOrder, pendingOrders, setBuyCadFilter, setBuyDateFilter, setBuySearch, setBuySort, setBuySourceFilter, setBuyTickerFilter, setSelectedBuyLogRow, shares, sourceBadgeClass, tickerOptions }} />
       ) : activeTab === 'calendar' ? (
         <CalendarPage {...{ buyLog, calendarFilteredDays, calendarMonth, calendarMonthTotal, calendarTickerFilter, calendarView, formatDate, money, monthLabel, setCalendarMonth, setCalendarTickerFilter, setCalendarView, setSelectedBuyLogRow, setSelectedCalendarDay, shares, tickerOptions }} />
       ) : activeTab === 'chart' ? (
@@ -1153,7 +1186,7 @@ function App() {
         <div className="ibkrReminder"><span><strong>Monthly IBKR check due</strong> Import the completed statement for {ibkrActivityStatus.reminder.month}.</span><div><button onClick={() => { setActiveTab('settings'); chooseIbkrActivityStatement('monthly'); }}>Import monthly CSV</button><button className="secondary" onClick={dismissIbkrActivityReminder}>Remind me next month</button></div></div>
       )}
 
-      {ibkrActivityPreview && <div className="modalBackdrop"><section className="modal ibkrReconcileModal"><h2>Review {ibkrActivityPreview.preview.statement.statementType} reconciliation</h2><p>{ibkrActivityPreview.preview.statement.periodStart} to {ibkrActivityPreview.preview.statement.periodEnd} · {ibkrActivityPreview.preview.statement.tradeCount} completed buys</p><div className="reconcileCounts"><span><b>{ibkrActivityPreview.preview.counts.unchanged}</b> unchanged</span><span><b>{ibkrActivityPreview.preview.counts.corrected}</b> corrections</span><span><b>{ibkrActivityPreview.preview.counts.added}</b> missing trades</span><span><b>{ibkrActivityPreview.preview.counts.review}</b> need review</span></div><div className="reconcileChecks">{ibkrActivityPreview.preview.checks.map((check) => <div key={check.label} className={check.passed ? 'checkPassed' : 'checkFailed'}><b>{check.passed ? '✓' : '!'}</b><span><strong>{check.label}</strong><small>{check.detail}</small></span></div>)}</div><p className="muted">Apply corrects matched trades and adds missing trades. Unmatched local records are never deleted. A database backup is created first. CAD conversions remain labeled estimated; exact USD execution values come from IBKR.</p>{ibkrActivityPreview.preview.review.length > 0 && <div className="warning">The unmatched local record will be kept unchanged: {ibkrActivityPreview.preview.review.map((r) => `${r.ticker} ${formatDate(r.boughtAt)}`).join(', ')}. You can apply the verified statement corrections now and review this record afterward.</div>}<div className="modalActions"><button disabled={busy || ibkrActivityPreview.preview.checks.some((check) => !check.passed && check.blocking)} onClick={applyIbkrActivityStatement}>{busy ? 'Backing up and applying…' : 'Back up and apply verified changes'}</button><button className="secondary" onClick={() => setIbkrActivityPreview(null)}>Cancel</button></div></section></div>}
+      {ibkrActivityPreview && <div className="modalBackdrop"><section className="modal ibkrReconcileModal"><h2>Review {ibkrActivityPreview.preview.statement.statementType} reconciliation</h2><p>{ibkrActivityPreview.preview.statement.periodStart} to {ibkrActivityPreview.preview.statement.periodEnd} · {ibkrActivityPreview.preview.statement.tradeCount} completed buys</p><div className="reconcileCounts"><span><b>{ibkrActivityPreview.preview.counts.unchanged}</b> unchanged</span><span><b>{ibkrActivityPreview.preview.counts.corrected}</b> corrections</span><span><b>{ibkrActivityPreview.preview.counts.added}</b> missing trades</span><span><b>{ibkrActivityPreview.preview.counts.review}</b> need review</span></div><div className="reconcileChecks">{ibkrActivityPreview.preview.checks.map((check) => <div key={check.label} className={check.passed ? 'checkPassed' : 'checkFailed'}><b>{check.passed ? '✓' : '!'}</b><span><strong>{check.label}</strong><small>{check.detail}</small></span></div>)}</div><p className="muted">Apply corrects matched trades, adds missing trades, and reconciles available CAD cash to IBKR ending cash using one dated adjustment. Unmatched local records are never deleted. A database backup is created first. CAD conversions remain labeled estimated; exact USD execution values come from IBKR.</p>{ibkrActivityPreview.preview.review.length > 0 && <div className="warning">The unmatched local record will be kept unchanged: {ibkrActivityPreview.preview.review.map((r) => `${r.ticker} ${formatDate(r.boughtAt)}`).join(', ')}. You can apply the verified statement corrections now and review this record afterward.</div>}<div className="modalActions"><button disabled={busy || ibkrActivityPreview.preview.checks.some((check) => !check.passed && check.blocking)} onClick={applyIbkrActivityStatement}>{busy ? 'Backing up and applying…' : 'Back up and apply verified changes'}</button><button className="secondary" onClick={() => setIbkrActivityPreview(null)}>Cancel</button></div></section></div>}
 
       {selectedBuyLogRow && <TradeDetailsModal {...{ buySourceLabel, deleteBuyLogRecord, editBuyLog, formatCadCostStatus, formatDate, money, selectedBuyLogRow, setSelectedBuyLogRow, shares }} />}
 

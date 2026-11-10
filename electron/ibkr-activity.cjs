@@ -88,13 +88,19 @@ function parseActivityStatement(text) {
     }
   }
   if (!periodStart || !periodEnd) throw new Error('This is not a readable IBKR Activity Statement CSV (statement period is missing).');
-  if (!result.trades.length) throw new Error('No completed stock buy executions were found in this statement.');
+  // A completed statement may legitimately contain no stock buys (for example,
+  // a quiet month) while still carrying ending positions or cash. Keep that
+  // statement importable for reconciliation; reject only a file with no
+  // recognizable activity data at all.
+  if (!result.trades.length && !result.positions.length && result.cash == null) {
+    throw new Error('No completed stock buys, ending positions, or CAD cash were found in this statement.');
+  }
   return { ...result, periodStart, periodEnd };
 }
 
 function close(a, b, tolerance) { return Number.isFinite(+a) && Number.isFinite(+b) && Math.abs(+a - +b) <= tolerance; }
 
-function buildPreview(statement, localRows, usdCadRate = 1) {
+function buildPreview(statement, localRows, usdCadRate = 1, localCashBalanceCAD = null) {
   const unused = new Set(localRows.map((row) => row.id));
   const actions = [];
   for (const trade of statement.trades) {
@@ -123,15 +129,26 @@ function buildPreview(statement, localRows, usdCadRate = 1) {
   const hasLaterLocalTrades = localRows.some((row) => row.boughtAt > `${statement.periodEnd}T23:59:59.999Z`);
   const duplicateFingerprints = statement.trades.length - new Set(statement.trades.map((trade) => trade.brokerTradeId)).size;
   const invalidArithmetic = statement.trades.filter((trade) => !close(trade.allInUsd, trade.grossUsd + trade.commissionUsd, 0.000002)).length;
+  const statementCashCAD = statement.cash == null ? null : Number.isFinite(Number(statement.cash)) ? Number(statement.cash) : null;
+  const ledgerCashCAD = localCashBalanceCAD == null ? null : Number.isFinite(Number(localCashBalanceCAD)) ? Number(localCashBalanceCAD) : null;
+  const cashDifferenceCAD = statementCashCAD == null || ledgerCashCAD == null ? null : statementCashCAD - ledgerCashCAD;
+  const cashDetail = statementCashCAD == null
+    ? 'No CAD ending cash was included; the existing cash ledger will remain unchanged.'
+    : ledgerCashCAD == null
+      ? `IBKR ending cash is ${statementCashCAD.toFixed(2)} CAD; it will be reconciled during apply.`
+      : Math.abs(cashDifferenceCAD) <= 0.005
+        ? `Ledger at period end and IBKR both show ${statementCashCAD.toFixed(2)} CAD.`
+        : `Ledger at period end ${ledgerCashCAD.toFixed(2)} CAD → IBKR ${statementCashCAD.toFixed(2)} CAD; a ${cashDifferenceCAD >= 0 ? '+' : ''}${cashDifferenceCAD.toFixed(2)} CAD adjustment will be added.`;
   return {
-    statement: { account: statement.account, currency: statement.currency, periodStart: statement.periodStart, periodEnd: statement.periodEnd, tradeCount: statement.trades.length, cash: statement.cash, positions: statement.positions, positionUpdateEligible: !hasLaterLocalTrades },
+    statement: { account: statement.account, currency: statement.currency, periodStart: statement.periodStart, periodEnd: statement.periodEnd, tradeCount: statement.trades.length, cash: statement.cash, positions: statement.positions, positionUpdateEligible: !hasLaterLocalTrades, ledgerCashCAD, cashDifferenceCAD },
     actions, review,
     counts: ['unchanged', 'corrected', 'added'].reduce((out, key) => ({ ...out, [key]: actions.filter((a) => a.type === key).length }), { review: periodExtras.length }),
     checks: [
       { label: 'Statement period detected', passed: true, detail: `${statement.periodStart} — ${statement.periodEnd}`, blocking: false },
-      { label: 'Completed stock executions parsed', passed: statement.trades.length > 0, detail: `${statement.trades.length} buys`, blocking: true },
+      { label: 'Completed stock executions parsed', passed: true, detail: statement.trades.length ? `${statement.trades.length} buys` : 'No buys in this period; positions/cash only', blocking: false },
       { label: 'Duplicate execution fingerprints', passed: duplicateFingerprints === 0, detail: duplicateFingerprints === 0 ? 'None' : `${duplicateFingerprints} found`, blocking: true },
       { label: 'USD totals and commissions balance', passed: invalidArithmetic === 0, detail: invalidArithmetic === 0 ? 'All rows balanced' : `${invalidArithmetic} rows differ`, blocking: true },
+      { label: 'Available CAD cash reconciled', passed: true, detail: cashDetail, blocking: false },
       { label: 'Every statement execution has a safe action', passed: actions.length === statement.trades.length, detail: `${actions.filter((a) => a.type === 'unchanged').length} unchanged, ${actions.filter((a) => a.type === 'corrected').length} corrected, ${actions.filter((a) => a.type === 'added').length} added`, blocking: false },
       { label: 'Local records needing review', passed: review.length === 0, detail: review.length === 0 ? 'None' : `${review.length} retained unchanged; review after applying`, blocking: false },
       { label: 'Ending IBKR positions checked', passed: statement.positions.length > 0, detail: hasLaterLocalTrades ? `${statement.positions.length} holdings; reference only because newer trades exist` : `${statement.positions.length} holdings; safe to update`, blocking: false },

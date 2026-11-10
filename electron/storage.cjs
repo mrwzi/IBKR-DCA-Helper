@@ -145,8 +145,12 @@ function normalizePendingOrder(row) {
     orderType: row.order_type || 'MARKET',
     orderSide: row.order_side || 'BUY',
     limitPrice: row.limit_price,
-    limitCurrency: row.limit_currency || row.cash_currency || 'USD',
+    // Limit prices are quoted in the holding's trading currency. Prefer the
+    // linked holding so older drafts cannot keep a stale OCR currency label.
+    limitCurrency: row.holding_currency || row.limit_currency || row.cash_currency || 'USD',
     status: row.status || 'PENDING',
+    cancelledAt: row.cancelled_at || null,
+    screenshotDataUrl: row.screenshot_data_url || '',
     triggeredAt: utcTimestamp(row.triggered_at),
     note: row.note || '',
     ocrText: row.ocr_text || '',
@@ -288,6 +292,7 @@ function createDb(userDataPath) {
       triggered_at TEXT,
       note TEXT,
       ocr_text TEXT,
+      screenshot_data_url TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (holding_id) REFERENCES holdings(id) ON DELETE SET NULL
@@ -333,8 +338,10 @@ function createDb(userDataPath) {
     ['limit_price', 'REAL'],
     ['limit_currency', 'TEXT'],
     ['status', "TEXT NOT NULL DEFAULT 'PENDING'"],
+    ['cancelled_at', 'TEXT'],
     ['triggered_at', 'TEXT'],
     ['note', 'TEXT'],
+    ['screenshot_data_url', 'TEXT'],
   ]) {
     if (!pendingOrderColumns.includes(column)) db.prepare(`ALTER TABLE pending_orders ADD COLUMN ${column} ${definition}`).run();
   }
@@ -462,7 +469,8 @@ function createDb(userDataPath) {
     return settings;
   }
 
-  function cashBalance() {
+  function cashBalance(asOf = null) {
+    if (asOf) return Number(db.prepare('SELECT COALESCE(SUM(amount_cad), 0) AS balance FROM cash_transactions WHERE occurred_at <= ?').get(String(asOf)).balance);
     return Number(db.prepare('SELECT COALESCE(SUM(amount_cad), 0) AS balance FROM cash_transactions').get().balance);
   }
 
@@ -693,6 +701,11 @@ function createDb(userDataPath) {
       return { balanceCAD: cashBalance(), transactions: this.listCashTransactions() };
     },
 
+    getCashBalanceAt(occurredAt) {
+      const timestamp = new Date(occurredAt).toISOString();
+      return cashBalance(timestamp);
+    },
+
     listCashTransactions() {
       return db.prepare('SELECT * FROM cash_transactions ORDER BY occurred_at DESC, id DESC').all().map(normalizeCashTransaction);
     },
@@ -876,7 +889,12 @@ function createDb(userDataPath) {
     },
 
     listPendingOrders() {
-      return db.prepare('SELECT * FROM pending_orders ORDER BY created_at DESC, id DESC').all().map(normalizePendingOrder);
+      return db.prepare(`
+        SELECT p.*, h.currency AS holding_currency
+        FROM pending_orders p
+        LEFT JOIN holdings h ON h.id = p.holding_id
+        ORDER BY p.created_at DESC, p.id DESC
+      `).all().map(normalizePendingOrder);
     },
 
     savePendingOrder(payload = {}) {
@@ -893,6 +911,9 @@ function createDb(userDataPath) {
       const orderSide = String(payload.orderSide || 'BUY').toUpperCase() === 'SELL' ? 'SELL' : 'BUY';
       const limitPrice = payload.limitPrice === '' || payload.limitPrice == null ? null : toNumber(payload.limitPrice, NaN);
       const limitCurrency = payload.limitCurrency === 'CAD' ? 'CAD' : 'USD';
+      const screenshotDataUrl = typeof payload.screenshotDataUrl === 'string' && /^data:image\//i.test(payload.screenshotDataUrl) && payload.screenshotDataUrl.length <= 8 * 1024 * 1024
+        ? payload.screenshotDataUrl
+        : '';
       if (!ticker) throw new Error('Pending order needs a ticker.');
       if (mode === 'cash' && (!Number.isFinite(cashAmount) || cashAmount <= 0)) throw new Error('Pending cash order needs a positive cash amount.');
       if (mode === 'shares' && (!Number.isFinite(sharesAmount) || sharesAmount <= 0)) throw new Error('Pending share order needs a positive share amount.');
@@ -900,14 +921,25 @@ function createDb(userDataPath) {
       if (orderType === 'LIMIT' && (!Number.isFinite(limitPrice) || limitPrice <= 0)) throw new Error('Limit orders need a positive limit price.');
       db.prepare(`
         INSERT INTO pending_orders
-          (holding_id, ticker, order_mode, shares_amount, cash_amount, cash_currency, estimated_fee_amount, fee_currency, visible_total_amount, order_type, order_side, limit_price, limit_currency, status, note, ocr_text)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
-      `).run(Number.isFinite(holdingId) ? holdingId : null, ticker, mode, sharesAmount, cashAmount, cashCurrency, feeAmount, feeCurrency, Number.isFinite(visibleTotal) ? visibleTotal : null, orderType, orderSide, orderType === 'LIMIT' ? limitPrice : null, orderType === 'LIMIT' ? limitCurrency : null, String(payload.note || ''), String(payload.ocrText || ''));
+          (holding_id, ticker, order_mode, shares_amount, cash_amount, cash_currency, estimated_fee_amount, fee_currency, visible_total_amount, order_type, order_side, limit_price, limit_currency, status, note, ocr_text, screenshot_data_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?)
+      `).run(Number.isFinite(holdingId) ? holdingId : null, ticker, mode, sharesAmount, cashAmount, cashCurrency, feeAmount, feeCurrency, Number.isFinite(visibleTotal) ? visibleTotal : null, orderType, orderSide, orderType === 'LIMIT' ? limitPrice : null, orderType === 'LIMIT' ? limitCurrency : null, String(payload.note || ''), String(payload.ocrText || ''), screenshotDataUrl);
       return this.listPendingOrders();
     },
 
     deletePendingOrder(id) {
       db.prepare('DELETE FROM pending_orders WHERE id = ?').run(Number(id));
+      return this.listPendingOrders();
+    },
+
+    cancelPendingOrder(id) {
+      const orderId = Number(id);
+      const existing = db.prepare('SELECT id, status FROM pending_orders WHERE id = ?').get(orderId);
+      if (!existing) return this.listPendingOrders();
+      if (existing.status !== 'CANCELLED') {
+        db.prepare("UPDATE pending_orders SET status = 'CANCELLED', cancelled_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+          .run(new Date().toISOString(), orderId);
+      }
       return this.listPendingOrders();
     },
 
@@ -1153,6 +1185,26 @@ function createDb(userDataPath) {
           }
         }
 
+        // IBKR's ending CAD cash is the source of truth for the statement
+        // period. Reconcile only the difference as a dated adjustment so
+        // deposits and buy debits remain intact and repeated overlapping
+        // monthly/YTD statements do not double-count anything.
+        const statementCashCAD = preview.statement.cash == null ? null : Number(preview.statement.cash);
+        let cashAdjustmentCAD = 0;
+        if (Number.isFinite(statementCashCAD)) {
+          const periodEnd = `${preview.statement.periodEnd}T23:59:59.999Z`;
+          const currentCashCAD = cashBalance(periodEnd);
+          cashAdjustmentCAD = statementCashCAD - currentCashCAD;
+          if (Math.abs(cashAdjustmentCAD) > 0.005) {
+            db.prepare(`INSERT INTO cash_transactions (type, amount_cad, occurred_at, note)
+              VALUES ('adjustment', ?, ?, ?)`).run(
+              cashAdjustmentCAD,
+              `${preview.statement.periodEnd}T23:59:59.999Z`,
+              `IBKR ending cash reconciliation ${preview.statement.periodStart} — ${preview.statement.periodEnd}`,
+            );
+          }
+        }
+
         // Post-write audit runs inside the same transaction. Any mismatch throws
         // and rolls the entire reconciliation back automatically.
         for (const action of preview.actions) {
@@ -1179,10 +1231,16 @@ function createDb(userDataPath) {
           WHERE ABS(h.shares_owned - COALESCE((SELECT SUM(b.shares_bought) FROM buy_log b WHERE b.holding_id = h.id), 0)) > 0.000000001
         `).all();
         if (shareMismatch.length) throw new Error(`Post-save audit found incorrect holding totals for ${shareMismatch.map((row) => row.ticker).join(', ')}. All changes were rolled back.`);
+        if (Number.isFinite(statementCashCAD)) {
+          const finalCashCAD = cashBalance(`${preview.statement.periodEnd}T23:59:59.999Z`);
+          if (Math.abs(finalCashCAD - statementCashCAD) > 0.005) {
+            throw new Error('Post-save audit found an incorrect available CAD cash balance. All changes were rolled back.');
+          }
+        }
         db.prepare(`INSERT INTO ibkr_reconciliations (imported_at, file_name, file_hash, period_start, period_end, counts_json, backup_path) VALUES (?, ?, ?, ?, ?, ?, ?)`)
           .run(new Date().toISOString(), metadata.fileName, metadata.fileHash, preview.statement.periodStart, preview.statement.periodEnd, JSON.stringify(preview.counts), backupPath);
         syncCashAvailableSetting();
-        return { passed: true, executionsChecked: preview.actions.length, duplicateIds: 0, holdingTotalsChecked: db.prepare('SELECT COUNT(*) AS count FROM holdings').get().count };
+        return { passed: true, executionsChecked: preview.actions.length, duplicateIds: 0, holdingTotalsChecked: db.prepare('SELECT COUNT(*) AS count FROM holdings').get().count, cashChecked: Number.isFinite(statementCashCAD), cashAdjustmentCAD };
       });
       const verification = transaction();
       return { backupPath, verification, history: this.listIbkrReconciliations(), buyLog: this.listBuyLog() };

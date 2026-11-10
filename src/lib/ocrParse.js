@@ -229,6 +229,9 @@ export function parseBrokerageBuyScreenshot(text, knownTickers = [], defaultPric
     result.mode = 'cash';
     result.cashPaidAmount = toNumber(cashOrderMatch[1]);
     result.cashPaidCurrency = cashOrderMatch[2].toUpperCase();
+    // The order amount currency is more reliable than unrelated CAD text
+    // elsewhere in the confirmation (for example, margin or funds-on-hold).
+    result.priceCurrency = result.cashPaidCurrency;
     fieldConfidence.cashPaidAmount = field(result.cashPaidAmount, 0.95, 'cash order header');
   }
 
@@ -241,6 +244,7 @@ export function parseBrokerageBuyScreenshot(text, knownTickers = [], defaultPric
       result.mode = 'cash';
       result.cashPaidAmount = toNumber(quantityMatch[1]);
       result.cashPaidCurrency = quantityMatch[2].toUpperCase();
+      result.priceCurrency = result.cashPaidCurrency;
       fieldConfidence.cashPaidAmount = field(result.cashPaidAmount, 0.9, 'cash quantity line');
     } else if (result.mode !== 'cash') {
       result.sharesBought = toNumber(quantityMatch[1]);

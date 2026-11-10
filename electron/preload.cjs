@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('dcaApi', {
   deleteBuyLog: (id) => ipcRenderer.invoke('buyLog:delete', id),
   listPendingOrders: () => ipcRenderer.invoke('pendingOrders:list'),
   savePendingOrder: (payload) => ipcRenderer.invoke('pendingOrders:save', payload),
+  cancelPendingOrder: (id) => ipcRenderer.invoke('pendingOrders:cancel', id),
   deletePendingOrder: (id) => ipcRenderer.invoke('pendingOrders:delete', id),
   exportBuyLogCsv: () => ipcRenderer.invoke('buyLog:exportCsv'),
   listHistory: () => ipcRenderer.invoke('history:list'),

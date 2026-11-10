@@ -41,7 +41,7 @@ Review portfolio performance, investment activity, fees, allocation, and IBKR re
 
 ## Installation
 
-Most users should download `DCA-Helper-Setup-1.0.49.exe` from the GitHub Releases page. The installer creates Desktop and Start Menu shortcuts and registers DCA Helper in Windows Installed Apps.
+Most users should download `DCA-Helper-Setup-1.0.55.exe` from the GitHub Releases page. The installer creates Desktop and Start Menu shortcuts and registers DCA Helper in Windows Installed Apps.
 
 Installing a newer version keeps the existing local portfolio database. Uninstalling the application also leaves portfolio data in place unless the user removes it manually.
 
@@ -61,7 +61,12 @@ Installing a newer version keeps the existing local portfolio database. Uninstal
 3. Review the reconciliation preview. It identifies unchanged records, corrections, missing trades, and local records that need review.
 4. Apply only the verified changes. The app creates a backup first and audits the saved result.
 5. Import each completed calendar month thereafter for regular accuracy checks. New users do not see this reminder until their first successful statement import.
-6. Use **Add money** in the top bar to record a deposit. Other cash adjustments remain available through the local cash ledger and do not change shares or trade prices.
+6. When the statement includes CAD ending cash, the app compares it with the ledger at that statement's period end and records only the dated difference, so overlapping monthly and YTD imports do not double-count cash.
+7. Use **Add money** in the top bar to record a deposit. Other cash adjustments remain available through the local cash ledger and do not change shares or trade prices.
+
+### Limit orders
+
+Use **Reserve limit order** to save a buy or sell target, optionally attach the IBKR order-preview screenshot, and choose either shares or a cash amount. DCA Helper monitors the reference price automatically while the order is active and shows **Price reached** when the target is met. A price touch is not proof of an IBKR fill: verify that IBKR shows **Filled**, then record the actual execution. The app never submits or changes broker orders automatically.
 
 ## What this app is and is not
 
