@@ -197,8 +197,8 @@ function App() {
       rows
         .map((row) => [row.ticker, {
           lastPrice: Number(row.lastPrice),
-          sessionLow: Number(row.sessionLow),
-          sessionHigh: Number(row.sessionHigh),
+          sessionLow: row.fetchedAt && String(row.fetchedAt).slice(0, 10) === new Date().toISOString().slice(0, 10) ? Number(row.sessionLow) : NaN,
+          sessionHigh: row.fetchedAt && String(row.fetchedAt).slice(0, 10) === new Date().toISOString().slice(0, 10) ? Number(row.sessionHigh) : NaN,
         }])
         .filter(([, price]) => Number.isFinite(price.lastPrice) && price.lastPrice > 0),
     ),
