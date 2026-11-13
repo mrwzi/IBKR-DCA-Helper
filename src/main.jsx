@@ -999,7 +999,6 @@ function App() {
       setMessage('The saved order is missing a usable amount, price, or exchange rate. Use Review fill for exact details.');
       return;
     }
-    if (!window.confirm(`Confirm ${holding.ticker} filled using the saved limit details? This adds ${sharesBought.toFixed(6)} shares and updates cash. You can correct it later from Buy Log or an IBKR statement.`)) return;
     setBusy(true);
     try {
       const result = await api.saveBuyLog({
@@ -1022,7 +1021,7 @@ function App() {
       }
       await api.deletePendingOrder(order.id);
       await reload();
-      setMessage(`${holding.ticker} filled order recorded. Shares and cash updated.`);
+      setMessage(`${holding.ticker} marked filled. Shares and cash updated from the saved limit order.`);
     } catch (error) {
       setMessage(error.message || 'Could not record the filled order.');
     } finally {
