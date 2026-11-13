@@ -27,4 +27,8 @@ describe('limit order logic', () => {
   it('never reports a cancelled broker order as ready', () => {
     expect(getLimitOrderState({ ...buy, status: 'CANCELLED' }, 90)).toBe('cancelled');
   });
+
+  it('keeps a reached order ready after the market moves away', () => {
+    expect(getLimitOrderState({ ...buy, status: 'READY' }, 110)).toBe('ready');
+  });
 });

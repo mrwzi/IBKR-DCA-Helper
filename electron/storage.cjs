@@ -943,6 +943,15 @@ function createDb(userDataPath) {
       return this.listPendingOrders();
     },
 
+    markPendingOrderReady(id) {
+      const orderId = Number(id);
+      const existing = db.prepare('SELECT id, status, order_type FROM pending_orders WHERE id = ?').get(orderId);
+      if (!existing || existing.order_type !== 'LIMIT' || existing.status !== 'PENDING') return this.listPendingOrders();
+      db.prepare("UPDATE pending_orders SET status = 'READY', triggered_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .run(new Date().toISOString(), orderId);
+      return this.listPendingOrders();
+    },
+
     saveBuyLog(payload = {}) {
       const id = payload.id ? Number(payload.id) : null;
       const requestedTicker = cleanSymbol(payload.ticker || payload.priceSymbol);

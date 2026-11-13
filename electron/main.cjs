@@ -414,6 +414,7 @@ ipcMain.handle('pendingOrders:save', (_event, payload) => {
   }
 });
 ipcMain.handle('pendingOrders:cancel', (_event, id) => db.cancelPendingOrder(id));
+ipcMain.handle('pendingOrders:markReady', (_event, id) => db.markPendingOrderReady(id));
 ipcMain.handle('pendingOrders:delete', (_event, id) => db.deletePendingOrder(id));
 ipcMain.handle('buyLog:exportCsv', async () => {
   try {

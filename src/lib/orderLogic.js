@@ -14,6 +14,7 @@ export function isLimitPriceReached(order, currentPrice) {
 
 export function getLimitOrderState(order, currentPrice) {
   if (String(order?.status || '').toUpperCase() === 'CANCELLED') return 'cancelled';
+  if (String(order?.status || '').toUpperCase() === 'READY') return 'ready';
   if (!isLimitOrder(order)) return 'pending';
   if (isLimitPriceReached(order, currentPrice)) return 'ready';
   return 'waiting';

@@ -19,6 +19,7 @@ import { HoldingModal } from './components/modals/HoldingModal.jsx';
 import { BrokerPriceModal } from './components/modals/BrokerPriceModal.jsx';
 import { AddMoneyModal } from './components/AddMoneyModal.jsx';
 import { LimitOrderModal } from './components/LimitOrderModal.jsx';
+import { isLimitPriceReached } from './lib/orderLogic.js';
 
 import { emptyForm, emptyBuyForm, money, percent, shares, fixedShares, usdCommission, formatDate, dateKey, NON_INVESTMENT_TICKERS, isInvestmentBuyLogRow, addDaysToDateKey, monthLabel, buildBuyCalendarDays, isManualRow, isUntrustedRow, formatSource, formatCadCostStatus, buySourceLabel, sourceBadgeClass, formatStatus, formatTodayStatus, formatShortReason, formatLastPrice, formatChange, deriveBrokerPreviousClose, numberOrNull, roundMoney, roundShares, convertAmountToCad, convertAmount, calculateBuyRecordPreview, defaultCurrency, validateHolding, getRangeStart, filterHistory, buildReport, buildBuyLogReport, buildSinceLastBuyMap, buildBoughtTodaySet } from './lib/appViewModel.jsx';
 
@@ -647,6 +648,20 @@ function App() {
     }, autoRefreshSeconds * 1000);
     return () => window.clearInterval(id);
   }, [settings?.autoRefreshEnabled, autoRefreshSeconds, enabledHoldingCount, hasPendingLimitOrders]);
+
+  useEffect(() => {
+    const reached = pendingOrders.filter((order) => (
+      String(order.orderType || '').toUpperCase() === 'LIMIT'
+      && String(order.status || '').toUpperCase() === 'PENDING'
+      && isLimitPriceReached(order, currentPriceByTicker?.[order.ticker])
+    ));
+    if (reached.length === 0) return undefined;
+    let cancelled = false;
+    Promise.all(reached.map((order) => api.markPendingOrderReady(order.id)))
+      .then(() => { if (!cancelled) return reload(); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [pendingOrders, currentPriceByTicker]);
 
   async function saveToday() {
     if (!canSaveToday) {

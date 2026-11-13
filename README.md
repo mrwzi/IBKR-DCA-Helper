@@ -41,7 +41,7 @@ Review portfolio performance, investment activity, fees, allocation, and IBKR re
 
 ## Installation
 
-Most users should download `DCA-Helper-Setup-1.0.55.exe` from the GitHub Releases page. The installer creates Desktop and Start Menu shortcuts and registers DCA Helper in Windows Installed Apps.
+Most users should download `DCA-Helper-Setup-1.0.56.exe` from the GitHub Releases page. The installer creates Desktop and Start Menu shortcuts and registers DCA Helper in Windows Installed Apps.
 
 Installing a newer version keeps the existing local portfolio database. Uninstalling the application also leaves portfolio data in place unless the user removes it manually.
 
