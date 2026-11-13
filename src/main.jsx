@@ -981,6 +981,55 @@ function App() {
     }
   }
 
+  async function confirmPendingOrder(order) {
+    const holding = holdings.find((item) => item.id === order.holdingId) || holdings.find((item) => item.ticker === order.ticker);
+    const priceCurrency = order.limitCurrency === 'CAD' ? 'CAD' : 'USD';
+    const buyPrice = Number(order.limitPrice);
+    const feeAmount = Number(order.estimatedFeeAmount || 0);
+    const feeCurrency = order.feeCurrency === 'CAD' ? 'CAD' : 'USD';
+    const cashAmount = Number(order.cashPaidAmount);
+    const savedShares = Number(order.sharesBought);
+    const sharesBought = order.mode === 'shares'
+      ? savedShares
+      : convertAmount(cashAmount, order.cashPaidCurrency === 'CAD' ? 'CAD' : 'USD', priceCurrency, Number(settings?.usdCadRate));
+    const grossCost = order.mode === 'shares' ? sharesBought * buyPrice : convertAmount(cashAmount, order.cashPaidCurrency === 'CAD' ? 'CAD' : 'USD', priceCurrency, Number(settings?.usdCadRate));
+    const cadAmount = convertAmountToCad(grossCost, priceCurrency, Number(settings?.usdCadRate));
+    const feeCAD = convertAmountToCad(feeAmount, feeCurrency, Number(settings?.usdCadRate));
+    if (!holding || !(sharesBought > 0) || !(buyPrice > 0) || !(cadAmount > 0) || !(feeCAD >= 0)) {
+      setMessage('The saved order is missing a usable amount, price, or exchange rate. Use Review fill for exact details.');
+      return;
+    }
+    if (!window.confirm(`Confirm ${holding.ticker} filled using the saved limit details? This adds ${sharesBought.toFixed(6)} shares and updates cash. You can correct it later from Buy Log or an IBKR statement.`)) return;
+    setBusy(true);
+    try {
+      const result = await api.saveBuyLog({
+        holdingId: holding.id,
+        ticker: holding.ticker,
+        priceSymbol: holding.priceSymbol,
+        sharesBought,
+        buyPrice,
+        priceCurrency,
+        cadAmount,
+        feeCAD,
+        boughtAt: order.triggeredAt || order.createdAt || new Date().toISOString(),
+        note: 'Confirmed from saved limit order; reconcile with the exact IBKR fill if needed.',
+        source: 'pending-confirmed',
+        planRow: order,
+      });
+      if (result && result.ok === false) {
+        setMessage(result.error || 'Could not record the filled order.');
+        return;
+      }
+      await api.deletePendingOrder(order.id);
+      await reload();
+      setMessage(`${holding.ticker} filled order recorded. Shares and cash updated.`);
+    } catch (error) {
+      setMessage(error.message || 'Could not record the filled order.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function openPendingOrder(order) {
     const holding = holdings.find((item) => item.id === order.holdingId) || holdings.find((item) => item.ticker === order.ticker);
     setBuyScanStatus('Pending draft loaded. Replace estimates with the actual Filled trade values.');
@@ -1190,7 +1239,7 @@ function App() {
       {activeTab === 'today' ? (
         <TodayPage {...{ MoreVertical, Plus, boughtTodayTickers, buyLogReport, buyRowsByTicker, deleteHolding, formatChange, formatLastPrice, formatSource, formatStatus, formatTodayStatus, hasHoldings, holdingActionId, holdings, isCashPool, isDipRanking, isUntrustedRow, money, openAddHolding, openEditHolding, percent, plan, portfolioValue, reconciliationIssues, rows, setActiveTab, setHoldingActionId, settings, shares, sinceLastBuyByTicker }} />
       ) : activeTab === 'buyLog' ? (
-        <BuyLogPage {...{ Edit3, Trash2, buyCadFilter, buyDateFilter, buyLog, buySearch, buySort, buySourceFilter, buySourceLabel, buyTickerFilter, cancelPendingOrder, currentPriceByTicker, deleteBuyLogRecord, deletePendingOrder, editBuyLog, filteredBuyLog, formatCadCostStatus, formatDate, money, openPendingOrder, pendingOrders, setBuyCadFilter, setBuyDateFilter, setBuySearch, setBuySort, setBuySourceFilter, setBuyTickerFilter, setSelectedBuyLogRow, shares, sourceBadgeClass, tickerOptions }} />
+        <BuyLogPage {...{ Edit3, Trash2, buyCadFilter, buyDateFilter, buyLog, buySearch, buySort, buySourceFilter, buySourceLabel, buyTickerFilter, cancelPendingOrder, confirmPendingOrder, currentPriceByTicker, deleteBuyLogRecord, deletePendingOrder, editBuyLog, filteredBuyLog, formatCadCostStatus, formatDate, money, openPendingOrder, pendingOrders, setBuyCadFilter, setBuyDateFilter, setBuySearch, setBuySort, setBuySourceFilter, setBuyTickerFilter, setSelectedBuyLogRow, shares, sourceBadgeClass, tickerOptions }} />
       ) : activeTab === 'calendar' ? (
         <CalendarPage {...{ buyLog, calendarFilteredDays, calendarMonth, calendarMonthTotal, calendarTickerFilter, calendarView, formatDate, money, monthLabel, setCalendarMonth, setCalendarTickerFilter, setCalendarView, setSelectedBuyLogRow, setSelectedCalendarDay, shares, tickerOptions }} />
       ) : activeTab === 'chart' ? (

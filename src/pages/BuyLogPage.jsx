@@ -1,7 +1,7 @@
 import { getLimitOrderState } from '../lib/orderLogic.js';
 
 export function BuyLogPage(props) {
-  const { Edit3, Trash2, buyCadFilter, buyDateFilter, buyLog, buySearch, buySort, buySourceFilter, buySourceLabel, buyTickerFilter, cancelPendingOrder, currentPriceByTicker, deleteBuyLogRecord, deletePendingOrder, editBuyLog, filteredBuyLog, formatCadCostStatus, formatDate, money, openPendingOrder, pendingOrders, setBuyCadFilter, setBuyDateFilter, setBuySearch, setBuySort, setBuySourceFilter, setBuyTickerFilter, setSelectedBuyLogRow, shares, sourceBadgeClass, tickerOptions } = props;
+  const { Edit3, Trash2, buyCadFilter, buyDateFilter, buyLog, buySearch, buySort, buySourceFilter, buySourceLabel, buyTickerFilter, cancelPendingOrder, confirmPendingOrder, currentPriceByTicker, deleteBuyLogRecord, deletePendingOrder, editBuyLog, filteredBuyLog, formatCadCostStatus, formatDate, money, openPendingOrder, pendingOrders, setBuyCadFilter, setBuyDateFilter, setBuySearch, setBuySort, setBuySourceFilter, setBuyTickerFilter, setSelectedBuyLogRow, shares, sourceBadgeClass, tickerOptions } = props;
   const activePendingCount = pendingOrders.filter((order) => String(order.status || '').toUpperCase() !== 'CANCELLED').length;
   return (
 <main className="layout">
@@ -55,7 +55,8 @@ export function BuyLogPage(props) {
                       <div className={`pendingOrderStatus ${limitReady && !isCancelled ? 'isReady' : ''}`}><span>Status</span><strong>{isLimit ? statusTitle : formatDate(order.createdAt)}</strong>{isLimit && <small>{isCancelled ? `Marked ${formatDate(order.cancelledAt || order.updatedAt)}` : limitReady ? 'Price tracking complete — confirm the actual broker fill.' : 'Automatic monitoring is active while DCA Helper is open.'}</small>}</div>
                       <div className="pendingOrderControls">
                         <div className="actions">
-                          {!isCancelled && ((!isLimit || side === 'BUY') ? <button type="button" onClick={() => openPendingOrder(order)}>{isLimit ? 'Review fill' : 'Finalize filled trade'}</button> : <button type="button" className="secondary" disabled title="Sell fills are recorded in IBKR; this app currently records completed buys.">Record sell in IBKR</button>)}
+                          {!isCancelled && ((!isLimit || side === 'BUY') ? <button type="button" onClick={() => isLimit ? confirmPendingOrder(order) : openPendingOrder(order)}>{isLimit ? 'Confirm filled' : 'Finalize filled trade'}</button> : <button type="button" className="secondary" disabled title="Sell fills are recorded in IBKR; this app currently records completed buys.">Record sell in IBKR</button>)}
+                          {!isCancelled && isLimit && <button type="button" className="secondary" onClick={() => openPendingOrder(order)}>Enter exact fill</button>}
                           {!isCancelled && isLimit && <button type="button" className="secondary" onClick={() => cancelPendingOrder(order)}>Mark cancelled</button>}
                           <button type="button" className="secondary danger" onClick={() => deletePendingOrder(order)}>{isCancelled ? 'Delete history' : 'Delete draft'}</button>
                         </div>
