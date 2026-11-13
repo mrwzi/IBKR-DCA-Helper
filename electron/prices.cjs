@@ -50,7 +50,14 @@ function lastValidPoint(result) {
 function validRangeExtreme(result, field) {
   const quote = result.indicators && result.indicators.quote && result.indicators.quote[0];
   const values = quote && Array.isArray(quote[field]) ? quote[field] : [];
-  const validValues = values.filter((value) => Number.isFinite(value)).map(Number);
+  const timestamps = Array.isArray(result.timestamp) ? result.timestamp : [];
+  const validTimestamps = timestamps.filter((value) => Number.isFinite(value));
+  const latestDate = validTimestamps.length > 0
+    ? new Date(Math.max(...validTimestamps) * 1000).toISOString().slice(0, 10)
+    : null;
+  const validValues = values
+    .filter((value, index) => Number.isFinite(value) && (!latestDate || !Number.isFinite(timestamps[index]) || new Date(Number(timestamps[index]) * 1000).toISOString().slice(0, 10) === latestDate))
+    .map(Number);
   if (validValues.length === 0) return null;
   return field === 'low' ? Math.min(...validValues) : Math.max(...validValues);
 }
