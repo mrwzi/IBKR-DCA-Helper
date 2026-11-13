@@ -212,6 +212,8 @@ function createDb(userDataPath) {
       price_symbol TEXT NOT NULL,
       last_price REAL,
       previous_close REAL,
+      session_low REAL,
+      session_high REAL,
       currency TEXT NOT NULL,
       fetched_at TEXT NOT NULL,
       error TEXT,
@@ -350,6 +352,7 @@ function createDb(userDataPath) {
   if (!holdingColumns.includes('buy_size_override_shares')) {
     db.prepare('ALTER TABLE holdings ADD COLUMN buy_size_override_shares REAL').run();
   }
+
   if (!holdingColumns.includes('manual_previous_close_override')) {
     db.prepare('ALTER TABLE holdings ADD COLUMN manual_previous_close_override REAL').run();
   }
@@ -405,6 +408,8 @@ function createDb(userDataPath) {
   `);
   const priceColumns = db.prepare('PRAGMA table_info(prices)').all().map((column) => column.name);
   for (const [column, type] of [
+    ['session_low', 'REAL'],
+    ['session_high', 'REAL'],
     ['source', 'TEXT'],
     ['source_time', 'TEXT'],
     ['is_delayed', 'INTEGER'],
@@ -774,13 +779,15 @@ function createDb(userDataPath) {
 
       db.prepare(`
         INSERT INTO prices
-          (holding_id, price_symbol, last_price, previous_close, currency, fetched_at, error, source, source_time, is_delayed, is_stale, warning,
+          (holding_id, price_symbol, last_price, previous_close, session_low, session_high, currency, fetched_at, error, source, source_time, is_delayed, is_stale, warning,
            normal_move_percent, normal_move_date, historical_warning)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(holding_id) DO UPDATE SET
           price_symbol = excluded.price_symbol,
           last_price = excluded.last_price,
           previous_close = excluded.previous_close,
+          session_low = excluded.session_low,
+          session_high = excluded.session_high,
           currency = excluded.currency,
           fetched_at = excluded.fetched_at,
           error = excluded.error,
@@ -797,6 +804,8 @@ function createDb(userDataPath) {
         price.priceSymbol,
         price.lastPrice ?? null,
         price.previousClose ?? null,
+        price.sessionLow ?? null,
+        price.sessionHigh ?? null,
         price.currency,
         price.fetchedAt,
         price.error ?? null,
@@ -815,7 +824,7 @@ function createDb(userDataPath) {
     listPrices() {
       return db.prepare(`
         SELECT holding_id AS holdingId, price_symbol AS priceSymbol, last_price AS lastPrice,
-               previous_close AS previousClose, currency, fetched_at AS fetchedAt, error,
+               previous_close AS previousClose, session_low AS sessionLow, session_high AS sessionHigh, currency, fetched_at AS fetchedAt, error,
                source, source_time AS sourceTime, is_delayed AS isDelayed, is_stale AS isStale, warning,
                normal_move_percent AS normalMovePercent, normal_move_date AS normalMoveDate, historical_warning AS historicalWarning
         FROM prices

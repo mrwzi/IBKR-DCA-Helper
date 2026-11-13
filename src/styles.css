@@ -873,9 +873,9 @@ tbody tr:last-child td {
 
 .pendingOrderCard {
   display: grid;
-  grid-template-columns: minmax(110px, 0.7fr) repeat(3, minmax(140px, 1fr)) auto;
+  grid-template-columns: minmax(130px, 0.7fr) repeat(3, minmax(140px, 1fr)) minmax(230px, 1.2fr);
   gap: 14px;
-  align-items: center;
+  align-items: start;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
   background: var(--bg-inset);
@@ -887,7 +887,7 @@ tbody tr:last-child td {
   gap: 4px;
 }
 
-.pendingOrderCard > div:first-child {
+.pendingOrderIdentity {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -902,6 +902,31 @@ tbody tr:last-child td {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.pendingOrderMetric small,
+.pendingOrderStatus small,
+.pendingOrderNote {
+  color: var(--text-mute);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.pendingOrderStatus.isReady strong {
+  color: var(--green);
+}
+
+.pendingOrderControls {
+  justify-items: end;
+}
+
+.pendingOrderNote {
+  max-width: 260px;
+  text-align: right;
+}
+
+.pendingOrderEvidence {
+  justify-self: end;
 }
 
 .orderModeSwitch {
@@ -1705,9 +1730,15 @@ tbody tr:last-child td {
     grid-template-columns: 1fr 1fr;
   }
 
-  .pendingOrderCard .actions {
+  .pendingOrderControls {
     grid-column: 1 / -1;
+    justify-items: start;
+  }
+
+  .pendingOrderControls .actions,
+  .pendingOrderNote {
     justify-content: flex-start;
+    text-align: left;
   }
 }
 .settingsSection{grid-column:1/-1;margin-top:24px;padding-top:20px;border-top:1px solid var(--border)}

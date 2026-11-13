@@ -1,6 +1,6 @@
 {
   "name": "dca-helper",
-  "version": "1.0.56",
+  "version": "1.0.57",
   "description": "Private local portfolio tracker for Interactive Brokers.",
   "main": "electron/main.cjs",
   "scripts": {

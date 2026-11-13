@@ -11,10 +11,18 @@ describe('limit order logic', () => {
     expect(isLimitPriceReached(buy, 100.01)).toBe(false);
   });
 
+  it('detects an intraday low even when the latest price has recovered', () => {
+    expect(isLimitPriceReached(buy, { lastPrice: 105, sessionLow: 99, sessionHigh: 106 })).toBe(true);
+  });
+
   it('triggers a sell limit at or above the limit price', () => {
     expect(isLimitPriceReached(sell, 100)).toBe(true);
     expect(isLimitPriceReached(sell, 100.01)).toBe(true);
     expect(isLimitPriceReached(sell, 99.99)).toBe(false);
+  });
+
+  it('detects an intraday high even when the latest price has moved lower', () => {
+    expect(isLimitPriceReached(sell, { lastPrice: 95, sessionLow: 94, sessionHigh: 101 })).toBe(true);
   });
 
   it('does not report a trigger without valid market data', () => {

@@ -47,6 +47,14 @@ function lastValidPoint(result) {
   return null;
 }
 
+function validRangeExtreme(result, field) {
+  const quote = result.indicators && result.indicators.quote && result.indicators.quote[0];
+  const values = quote && Array.isArray(quote[field]) ? quote[field] : [];
+  const validValues = values.filter((value) => Number.isFinite(value)).map(Number);
+  if (validValues.length === 0) return null;
+  return field === 'low' ? Math.min(...validValues) : Math.max(...validValues);
+}
+
 function parseYahooResult(json, symbolToFetch, holding, sourceMode) {
   const result = json.chart && json.chart.result && json.chart.result[0];
   if (!result) throw new Error('No Yahoo chart result');
@@ -77,6 +85,8 @@ function parseYahooResult(json, symbolToFetch, holding, sourceMode) {
     priceSymbol: meta.symbol || symbolToFetch,
     lastPrice,
     previousClose,
+    sessionLow: validRangeExtreme(result, 'low'),
+    sessionHigh: validRangeExtreme(result, 'high'),
     currency: holding.currency,
     displayName: meta.longName || meta.shortName || null,
     fetchedAt: new Date().toISOString(),
@@ -261,6 +271,8 @@ async function mapRelayPriceToHolding(item, holding) {
     priceSymbol: holding.priceSymbol || holding.ticker,
     lastPrice,
     previousClose,
+    sessionLow: Number.isFinite(Number(item.sessionLow ?? item.dayLow ?? item.low)) ? Number(item.sessionLow ?? item.dayLow ?? item.low) : null,
+    sessionHigh: Number.isFinite(Number(item.sessionHigh ?? item.dayHigh ?? item.high)) ? Number(item.sessionHigh ?? item.dayHigh ?? item.high) : null,
     currency: item.currency === 'CAD' || item.currency === 'USD' ? item.currency : holding.currency,
     displayName: null,
     fetchedAt: new Date().toISOString(),

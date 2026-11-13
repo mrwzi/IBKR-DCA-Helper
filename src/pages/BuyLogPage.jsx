@@ -18,29 +18,49 @@ export function BuyLogPage(props) {
                 {pendingOrders.map((order) => {
                   const isLimit = String(order.orderType || '').toUpperCase() === 'LIMIT';
                   const isCancelled = String(order.status || '').toUpperCase() === 'CANCELLED';
-                  const currentPrice = currentPriceByTicker?.[order.ticker];
-                  const limitReady = getLimitOrderState(order, currentPrice) === 'ready';
                   const side = String(order.orderSide || 'BUY').toUpperCase();
+                  const market = currentPriceByTicker?.[order.ticker] || {};
+                  const currentPrice = Number(market.lastPrice);
+                  const sessionExtreme = Number(side === 'SELL' ? market.sessionHigh : market.sessionLow);
+                  const hasCurrentPrice = Number.isFinite(currentPrice) && currentPrice > 0;
+                  const hasSessionExtreme = Number.isFinite(sessionExtreme) && sessionExtreme > 0;
+                  const limitReady = getLimitOrderState(order, market) === 'ready';
+                  const statusTitle = isCancelled
+                    ? 'Cancelled in IBKR'
+                    : limitReady
+                      ? 'Target reached'
+                      : side === 'BUY'
+                        ? 'Waiting — target below market'
+                        : 'Waiting — target above market';
+                  const marketDetail = !hasCurrentPrice
+                    ? 'Price unavailable — refresh needed'
+                    : limitReady
+                      ? `Target reached using ${hasSessionExtreme ? `today’s ${side === 'BUY' ? 'low' : 'high'}` : 'the latest quote'}. Verify the fill in IBKR.`
+                      : hasSessionExtreme
+                        ? `Now ${money(currentPrice)} · today’s ${side === 'BUY' ? 'low' : 'high'} ${money(sessionExtreme)}`
+                        : `Now ${money(currentPrice)} ${order.limitCurrency}`;
                   return (
                     <article key={order.id} className={`pendingOrderCard${isLimit ? ' limitOrderCard' : ''}`}>
-                      <div>
-                        <span className={`badge ${isCancelled ? 'skip' : isLimit ? (limitReady ? 'buy' : 'wait') : 'skip'}`}>{isCancelled ? 'Cancelled in IBKR' : isLimit ? `Limit ${side}` : 'Pending'}</span>
+                      <div className="pendingOrderIdentity">
+                        <span className={`badge ${isCancelled ? 'skip' : isLimit ? (limitReady ? 'buy' : 'wait') : 'skip'}`}>{isCancelled ? 'Cancelled' : isLimit ? `Limit ${side}` : 'Pending'}</span>
                         <strong>{order.ticker}</strong>
                       </div>
-                      <div><span>{isLimit ? 'Quantity' : 'Planned amount'}</span><strong>{order.mode === 'shares' ? `${shares(order.sharesBought)} shares` : order.cashPaidAmount == null ? '-' : `${money(order.cashPaidAmount)} ${order.cashPaidCurrency}`}</strong></div>
+                      <div className="pendingOrderMetric"><span>{isLimit ? 'Order amount' : 'Planned amount'}</span><strong>{order.mode === 'shares' ? `${shares(order.sharesBought)} shares` : order.cashPaidAmount == null ? '-' : `${money(order.cashPaidAmount)} ${order.cashPaidCurrency}`}</strong></div>
                       {isLimit ? (
-                        <div><span>Limit target</span><strong>{money(order.limitPrice)} {order.limitCurrency}</strong><small>{currentPrice == null ? 'Price unavailable' : `Current ${money(currentPrice)} ${order.limitCurrency}`}</small></div>
+                        <div className="pendingOrderMetric"><span>Limit target</span><strong>{money(order.limitPrice)} {order.limitCurrency}</strong><small>{marketDetail}</small></div>
                       ) : (
-                        <div><span>Estimated fee</span><strong>{order.estimatedFeeAmount == null ? '-' : `${money(order.estimatedFeeAmount)} ${order.feeCurrency}`}</strong></div>
+                        <div className="pendingOrderMetric"><span>Estimated fee</span><strong>{order.estimatedFeeAmount == null ? '-' : `${money(order.estimatedFeeAmount)} ${order.feeCurrency}`}</strong></div>
                       )}
-                      {isLimit && order.estimatedFeeAmount != null && <div><span>Estimated fee</span><strong>{money(order.estimatedFeeAmount)} {order.feeCurrency}</strong></div>}
-                      <div><span>{isLimit ? 'Status' : 'Saved'}</span><strong>{isCancelled ? 'Cancelled in IBKR' : isLimit ? (limitReady ? 'Price reached' : 'Watching price') : formatDate(order.createdAt)}</strong>{isLimit && <small>{isCancelled ? `Marked ${formatDate(order.cancelledAt || order.updatedAt)}` : limitReady ? 'Verify Filled in IBKR before recording' : 'Monitoring automatically; IBKR fill still required'}</small>}</div>
-                      {isLimit && order.note && <div><span>Note</span><strong>{order.note}</strong></div>}
-                      {isLimit && order.screenshotDataUrl && <details className="pendingOrderEvidence"><summary>View order preview screenshot</summary><a href={order.screenshotDataUrl} target="_blank" rel="noreferrer"><img className="pendingOrderScreenshot" src={order.screenshotDataUrl} alt="Limit order preview screenshot" /></a><small>IBKR order preview — not filled</small></details>}
-                      <div className="actions">
-                        {!isCancelled && ((!isLimit || side === 'BUY') ? <button type="button" onClick={() => openPendingOrder(order)}>{isLimit ? 'Record filled buy' : 'Finalize filled trade'}</button> : <button type="button" className="secondary" disabled title="Sell fills are recorded in IBKR; this app currently records completed buys.">Record sell in IBKR</button>)}
-                        {!isCancelled && isLimit && <button type="button" className="secondary" onClick={() => cancelPendingOrder(order)}>Mark cancelled in IBKR</button>}
-                        <button type="button" className="secondary danger" onClick={() => deletePendingOrder(order)}>{isCancelled ? 'Delete history' : 'Delete draft'}</button>
+                      {isLimit && order.estimatedFeeAmount != null && <div className="pendingOrderMetric"><span>Estimated fee</span><strong>{money(order.estimatedFeeAmount)} {order.feeCurrency}</strong></div>}
+                      <div className={`pendingOrderStatus ${limitReady && !isCancelled ? 'isReady' : ''}`}><span>Status</span><strong>{isLimit ? statusTitle : formatDate(order.createdAt)}</strong>{isLimit && <small>{isCancelled ? `Marked ${formatDate(order.cancelledAt || order.updatedAt)}` : limitReady ? 'Price tracking complete — confirm the actual broker fill.' : 'Automatic monitoring is active while DCA Helper is open.'}</small>}</div>
+                      <div className="pendingOrderControls">
+                        <div className="actions">
+                          {!isCancelled && ((!isLimit || side === 'BUY') ? <button type="button" onClick={() => openPendingOrder(order)}>{isLimit ? 'Review fill' : 'Finalize filled trade'}</button> : <button type="button" className="secondary" disabled title="Sell fills are recorded in IBKR; this app currently records completed buys.">Record sell in IBKR</button>)}
+                          {!isCancelled && isLimit && <button type="button" className="secondary" onClick={() => cancelPendingOrder(order)}>Mark cancelled</button>}
+                          <button type="button" className="secondary danger" onClick={() => deletePendingOrder(order)}>{isCancelled ? 'Delete history' : 'Delete draft'}</button>
+                        </div>
+                        {isLimit && order.note && <small className="pendingOrderNote">{order.note}</small>}
+                        {isLimit && order.screenshotDataUrl && <details className="pendingOrderEvidence"><summary>Order preview</summary><a href={order.screenshotDataUrl} target="_blank" rel="noreferrer"><img className="pendingOrderScreenshot" src={order.screenshotDataUrl} alt="Limit order preview screenshot" /></a><small>IBKR preview — not a completed fill</small></details>}
                       </div>
                     </article>
                   );

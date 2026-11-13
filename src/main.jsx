@@ -195,8 +195,12 @@ function App() {
   const currentPriceByTicker = useMemo(
     () => Object.fromEntries(
       rows
-        .map((row) => [row.ticker, Number(row.lastPrice)])
-        .filter(([, price]) => Number.isFinite(price) && price > 0),
+        .map((row) => [row.ticker, {
+          lastPrice: Number(row.lastPrice),
+          sessionLow: Number(row.sessionLow),
+          sessionHigh: Number(row.sessionHigh),
+        }])
+        .filter(([, price]) => Number.isFinite(price.lastPrice) && price.lastPrice > 0),
     ),
     [rows],
   );

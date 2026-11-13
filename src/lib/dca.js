@@ -357,6 +357,8 @@ function getPriceForHolding(holding, pricesByHoldingId, settings = {}) {
   return {
     lastPrice,
     previousClose,
+    sessionLow: finiteNumber(priceRow && priceRow.sessionLow),
+    sessionHigh: finiteNumber(priceRow && priceRow.sessionHigh),
     source,
     hasPriceRow: Boolean(priceRow),
     fetchedAt: priceRow && priceRow.fetchedAt,
@@ -455,6 +457,8 @@ function prepareRows({ holdings, prices, settings }) {
         buySizeOverrideShares: finiteNumber(holding.buySizeOverrideShares),
         lastPrice: priceInfo.lastPrice,
         previousClose: priceInfo.previousClose,
+        sessionLow: priceInfo.sessionLow,
+        sessionHigh: priceInfo.sessionHigh,
         priceCAD,
         currentValueCAD,
         changePercent,
